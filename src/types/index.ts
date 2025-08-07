@@ -1,16 +1,8 @@
-export interface ClipboardItem {
-  id: string;
-  content: string;
-  category: ClipboardCategory;
-  timestamp: Date;
-  size?: number;
-  filename?: string;
-  thumbnailUrl?: string;
-  isFavorite: boolean;
-  tags: string[];
-  metadata?: Record<string, any>;
-}
+// src/types/index.ts
+import React from 'react';
 
+// DECLARAÇÃO CORRIGIDA: Agora, o tipo ClipboardCategory é definido e exportado aqui
+// Incluindo a categoria 'all' que você usa em outros componentes
 export type ClipboardCategory = 'all' | 'text' | 'link' | 'image' | 'file' | 'folder';
 
 export type ViewMode = 'grid' | 'list';
@@ -35,7 +27,8 @@ export interface Settings {
 }
 
 export interface CategoryTab {
-  id: ClipboardCategory;
+  // O tipo do id agora é ClipboardCategory
+  id: ClipboardCategory; 
   label: string;
   icon: React.ComponentType;
 }

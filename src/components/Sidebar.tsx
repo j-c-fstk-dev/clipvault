@@ -1,17 +1,22 @@
-import React from 'react';
+import React, { FC, SVGProps } from 'react';
 import { ClipboardList, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardCategory, Theme, AccentColor } from '../types';
 
+// Definimos um tipo para os componentes de ícone para que o TypeScript saiba que eles aceitam props de SVG
+type IconComponent = FC<SVGProps<SVGSVGElement>>;
+
 interface SidebarProps {
-  activeCategory: ClipboardCategory;
-  onCategoryChange: (category: ClipboardCategory) => void;
-  getCategoryIcon: (category: ClipboardCategory) => React.ComponentType;
-  getCategoryCount: (category: ClipboardCategory) => number;
+  activeCategory: ClipboardCategory | 'all';
+  onCategoryChange: (category: ClipboardCategory | 'all') => void;
+  // A tipagem da função getCategoryIcon foi ajustada
+  getCategoryIcon: (category: ClipboardCategory | 'all') => IconComponent;
+  getCategoryCount: (category: ClipboardCategory | 'all') => number;
   theme: Theme;
   accentColor: AccentColor;
 }
 
-const categories: { id: ClipboardCategory; label: string; icon: React.ComponentType }[] = [
+// O array agora usa o novo tipo IconComponent
+const categories: { id: ClipboardCategory | 'all'; label: string; icon: IconComponent }[] = [
   { id: 'all', label: 'All Items', icon: ClipboardList },
   { id: 'text', label: 'Text', icon: FileText },
   { id: 'link', label: 'Links', icon: Link },

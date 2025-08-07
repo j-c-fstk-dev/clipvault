@@ -1,5 +1,18 @@
 import { useState, useEffect } from 'react';
-import { ClipboardItem, ClipboardCategory } from '../types';
+
+export type ClipboardCategory = 'text' | 'link' | 'image' | 'file' | 'folder';
+
+export interface ClipboardItem {
+  id: string;
+  content: string;
+  category: ClipboardCategory;
+  timestamp: string;
+  size?: number;
+  filename?: string;
+  thumbnailUrl?: string;
+  isFavorite: boolean;
+  tags: string[];
+}
 
 // Mock data for demonstration
 const generateMockData = (): ClipboardItem[] => {
@@ -8,7 +21,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '1',
       content: 'https://github.com/clipvault/clipvault',
       category: 'link',
-      timestamp: new Date(Date.now() - 1000 * 60 * 5),
+      timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
       isFavorite: true,
       tags: ['github', 'repository'],
     },
@@ -16,7 +29,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '2',
       content: 'ClipVault is a revolutionary clipboard manager that changes how you interact with your clipboard history. With advanced categorization, smart content detection, and a beautiful interface, it\'s like having a memory companion that never forgets.',
       category: 'text',
-      timestamp: new Date(Date.now() - 1000 * 60 * 15),
+      timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
       size: 256,
       isFavorite: false,
       tags: ['description', 'app'],
@@ -25,7 +38,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '3',
       content: 'Screenshot_2024_01_15.png',
       category: 'image',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30),
+      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
       size: 1024 * 512,
       filename: 'Screenshot_2024_01_15.png',
       thumbnailUrl: 'https://images.pexels.com/photos/1714208/pexels-photo-1714208.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -36,7 +49,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '4',
       content: '/home/user/Documents/project-files/',
       category: 'folder',
-      timestamp: new Date(Date.now() - 1000 * 60 * 45),
+      timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
       isFavorite: false,
       tags: ['documents', 'project'],
     },
@@ -44,7 +57,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '5',
       content: 'npm install @clipvault/core --save',
       category: 'text',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60),
+      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
       isFavorite: false,
       tags: ['command', 'npm'],
     },
@@ -52,7 +65,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '6',
       content: 'presentation.pdf',
       category: 'file',
-      timestamp: new Date(Date.now() - 1000 * 60 * 90),
+      timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
       size: 1024 * 1024 * 2.5,
       filename: 'presentation.pdf',
       isFavorite: true,
@@ -62,7 +75,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '7',
       content: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       category: 'link',
-      timestamp: new Date(Date.now() - 1000 * 60 * 120),
+      timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
       isFavorite: false,
       tags: ['video', 'youtube'],
     },
@@ -70,7 +83,7 @@ const generateMockData = (): ClipboardItem[] => {
       id: '8',
       content: 'wallpaper_4k.jpg',
       category: 'image',
-      timestamp: new Date(Date.now() - 1000 * 60 * 180),
+      timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
       size: 1024 * 1024 * 3.2,
       filename: 'wallpaper_4k.jpg',
       thumbnailUrl: 'https://images.pexels.com/photos/956999/milky-way-starry-sky-night-sky-star-956999.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -82,33 +95,6 @@ const generateMockData = (): ClipboardItem[] => {
   return mockItems;
 };
 
-const detectCategory = (content: string): ClipboardCategory => {
-  // URL detection
-  const urlRegex = /^https?:\/\/.+/i;
-  if (urlRegex.test(content)) {
-    return 'link';
-  }
-
-  // File path detection
-  if (content.includes('/') && (content.includes('.') || content.endsWith('/'))) {
-    if (content.endsWith('/')) {
-      return 'folder';
-    }
-    
-    const extension = content.split('.').pop()?.toLowerCase();
-    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'];
-    
-    if (extension && imageExtensions.includes(extension)) {
-      return 'image';
-    }
-    
-    return 'file';
-  }
-
-  // Long text (default category)
-  return 'text';
-};
-
 export const useClipboard = () => {
   const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
 
@@ -117,18 +103,8 @@ export const useClipboard = () => {
     setClipboardItems(generateMockData());
   }, []);
 
-  const addItem = (content: string) => {
-    const newItem: ClipboardItem = {
-      id: Date.now().toString(),
-      content,
-      category: detectCategory(content),
-      timestamp: new Date(),
-      size: content.length,
-      isFavorite: false,
-      tags: [],
-    };
-
-    setClipboardItems(prev => [newItem, ...prev]);
+  const addItem = (item: ClipboardItem) => {
+    setClipboardItems(prev => [item, ...prev]);
   };
 
   const toggleFavorite = (id: string) => {
