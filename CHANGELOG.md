@@ -6,6 +6,24 @@ All notable changes to ClipVault are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
+### Changed
+
+- New look inspired by macOS: a floating glass sidebar and glass toolbar
+  controls over a soft glow of the accent color, with quiet, solid cards for
+  the history. The glass is drawn without blur, so it stays sharp on older
+  integrated graphics
+- The history is grouped by day (Today, Yesterday, …) when sorted by date,
+  and cards are laid out in columns so images and long text fit without gaps
+- Copied text is shown in a monospace font; links show their site first
+- Clicking a card opens its preview; copy, favorite, tag, preview and delete
+  are in a bar that appears on hover or keyboard selection
+- Recording status and the pause button moved to the bottom of the sidebar
+- Settings are grouped like System Settings, with switches, a theme toggle
+  and round accent color swatches
+- Interface font: Geist and Geist Mono, bundled with the app
+
 ## [0.1.1] - 2026-10-20
 
 ### Added
@@ -67,6 +85,7 @@ Runs on X11 desktops (XFCE, MATE, Cinnamon, KDE on X11…).
 - Content marked secret by password managers is never stored; capture can
   be paused
 
-[Unreleased]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/j-c-fstk-dev/clipvault/releases/tag/v0.1.0

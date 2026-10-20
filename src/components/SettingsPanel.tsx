@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Moon, Sun, Download, Upload } from 'lucide-react';
+import { IconButton, Segmented, Switch } from './ui';
 import { Settings, Theme, AccentColor } from '../types';
 import { eventToAccelerator } from '../lib/shortcuts';
 import * as backend from '../lib/backend';
@@ -77,14 +78,39 @@ const formatBytes = (bytes: number) =>
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+/** A titled group of settings rows, like System Settings on macOS. */
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <section>
+    <h3 className="px-1 mb-2 text-small font-semibold text-muted">{title}</h3>
+    <div className="card rounded-xl divide-y divide-[color:var(--line)]">{children}</div>
+  </section>
+);
+
+interface RowProps {
+  label: string;
+  hint?: React.ReactNode;
+  children?: React.ReactNode;
+}
+
+/** One setting: what it is on the left, its control on the right. */
+const Row: React.FC<RowProps> = ({ label, hint, children }) => (
+  <div className="flex items-center justify-between gap-6 px-4 py-3">
+    <div className="min-w-0">
+      <p className="text-body">{label}</p>
+      {hint && <p className="mt-0.5 text-caption text-muted">{hint}</p>}
+    </div>
+    {children}
+  </div>
+);
+
+const SMALL_FIELD = 'field h-8 rounded-lg px-2.5 text-small';
+
 interface BackupSectionProps {
   maxItems: number;
-  theme: Theme;
-  accentColor: AccentColor;
 }
 
 /** Export the history to a .zip, or merge one back in. */
-const BackupSection: React.FC<BackupSectionProps> = ({ maxItems, theme, accentColor }) => {
+const BackupSection: React.FC<BackupSectionProps> = ({ maxItems }) => {
   const [busy, setBusy] = useState<'export' | 'import' | null>(null);
   const [result, setResult] = useState<{ message: string; error: boolean } | null>(null);
 
@@ -122,10 +148,10 @@ const BackupSection: React.FC<BackupSectionProps> = ({ maxItems, theme, accentCo
 
   const button = (kind: 'export' | 'import', label: string, Icon: typeof Download) => (
     <button
+      type="button"
       onClick={() => run(kind)}
       disabled={busy !== null || !backend.hasBackend}
-      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-      style={{ backgroundColor: accentColor }}
+      className="pill h-8 px-3 rounded-lg inline-flex items-center gap-1.5 text-small font-medium disabled:opacity-40 hover:text-accent transition-colors"
     >
       <Icon className="w-4 h-4" />
       {busy === kind ? `${kind === 'export' ? 'Exporting' : 'Importing'}…` : label}
@@ -133,27 +159,22 @@ const BackupSection: React.FC<BackupSectionProps> = ({ maxItems, theme, accentCo
   );
 
   return (
-    <section>
-      <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-        Backup
-      </h3>
-      <p className={`text-xs mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-        A .zip with your whole history: text, images, saved file copies, tags and favorites.
-        Importing merges into the current history; nothing is replaced.
-      </p>
-      <div className="flex gap-3">
-        {button('export', 'Export backup…', Download)}
-        {button('import', 'Import backup…', Upload)}
-      </div>
+    <Section title="Backup">
+      <Row
+        label="History backup"
+        hint="A .zip with text, images, saved file copies, tags and favorites. Importing adds to the current history and replaces nothing."
+      >
+        <div className="flex gap-2 shrink-0">
+          {button('export', 'Export…', Download)}
+          {button('import', 'Import…', Upload)}
+        </div>
+      </Row>
       {result && (
-        <p
-          role="status"
-          className={`mt-3 text-sm ${result.error ? 'text-red-500' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
-        >
+        <p role="status" className={`px-4 py-3 text-small ${result.error ? 'text-danger' : 'text-muted'}`}>
           {result.message}
         </p>
       )}
-    </section>
+    </Section>
   );
 };
 
@@ -211,420 +232,162 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onClose,
   saveError
 }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className={`max-w-2xl w-full max-h-[90vh] rounded-2xl border overflow-hidden ${
-        theme === 'dark' 
-          ? 'bg-gray-900 border-gray-700' 
-          : 'bg-white border-gray-300'
-      }`}>
-        {/* Header */}
-        <div className={`flex items-center justify-between p-6 border-b ${
-          theme === 'dark' ? 'border-gray-700' : 'border-gray-200'
-        }`}>
-          <h2 className={`text-2xl font-bold ${
-            theme === 'dark' ? 'text-white' : 'text-gray-900'
-          }`}>
-            Settings
-          </h2>
-          <button
-            onClick={onClose}
-            className={`p-2 rounded-lg transition-all duration-300 ${
-              theme === 'dark' ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !(e.target as HTMLElement).closest('input')) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
-        {/* Content */}
-        <div className="p-6 overflow-auto max-h-[70vh] space-y-8">
+  const openWithTypes = Object.keys(settings.openWith);
+  const toggle = (key: 'captureEnabled' | 'notifications' | 'startOnBoot' | 'minimizeToTray' | 'hardwareAcceleration', label: string) => (
+    <Switch label={label} checked={settings[key]} onChange={value => onUpdateSettings({ [key]: value })} />
+  );
+  const shortcut = (key: keyof Settings['shortcuts'], clearable = false) => (
+    <ShortcutField
+      value={settings.shortcuts[key]}
+      onChange={value => onUpdateSettings({ shortcuts: { ...settings.shortcuts, [key]: value } })}
+      clearable={clearable}
+      className={`${SMALL_FIELD} w-44 text-center shrink-0`}
+    />
+  );
+
+  return (
+    <div className="overlay fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+        onClick={e => e.stopPropagation()}
+        className="sheet sheet-in w-full max-w-2xl max-h-[88vh] rounded-2xl flex flex-col overflow-hidden !bg-canvas"
+      >
+        <header className="flex items-center justify-between px-6 h-16 shrink-0 border-b border-line">
+          <h2 className="text-title font-semibold tracking-[-0.015em]">Settings</h2>
+          <IconButton label="Close" icon={X} onClick={onClose} />
+        </header>
+
+        <div className="flex-1 min-h-0 overflow-auto px-6 py-5 flex flex-col gap-6">
           {saveError && (
-            <div role="alert" className="px-4 py-3 rounded-lg text-sm bg-red-600/10 text-red-500 border border-red-500/30">
+            <div role="alert" className="px-4 py-3 rounded-xl text-small text-danger card">
               Could not save settings: {saveError}
             </div>
           )}
-          {/* Appearance */}
-          <section>
-            <h3 className={`text-lg font-semibold mb-4 ${
-              theme === 'dark' ? 'text-white' : 'text-gray-900'
-            }`}>
-              Appearance
-            </h3>
-            
-            {/* Theme Selection */}
-            <div className="mb-6">
-              <label className={`block text-sm font-medium mb-3 ${
-                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Theme
-              </label>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => onThemeChange('light')}
-                  className={`flex items-center space-x-2 px-4 py-3 rounded-lg border transition-all duration-300 ${
-                    theme === 'light'
-                      ? 'text-white border-transparent'
-                      : theme === 'dark'
-                      ? 'text-gray-300 border-gray-600 hover:border-gray-500'
-                      : 'text-gray-700 border-gray-300 hover:border-gray-400'
-                  }`}
-                  style={{ backgroundColor: theme === 'light' ? accentColor : 'transparent' }}
-                >
-                  <Sun className="w-5 h-5" />
-                  <span>Light</span>
-                </button>
-                <button
-                  onClick={() => onThemeChange('dark')}
-                  className={`flex items-center space-x-2 px-4 py-3 rounded-lg border transition-all duration-300 ${
-                    theme === 'dark'
-                      ? 'text-white border-transparent'
-                      : 'text-gray-700 border-gray-300 hover:border-gray-400'
-                  }`}
-                  style={{ backgroundColor: theme === 'dark' ? accentColor : 'transparent' }}
-                >
-                  <Moon className="w-5 h-5" />
-                  <span>Dark</span>
-                </button>
-              </div>
-            </div>
 
-            {/* Accent Color Selection */}
-            <div>
-              <label className={`block text-sm font-medium mb-3 ${
-                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-              }`}>
-                Accent Color
-              </label>
-              <div className="grid grid-cols-4 gap-3">
-                {accentColors.map((color) => (
-                  <button
-                    key={color.value}
-                    onClick={() => onAccentColorChange(color.value)}
-                    className={`group relative p-3 rounded-lg border-2 transition-all duration-300 ${
-                      accentColor === color.value
-                        ? 'border-white shadow-lg scale-105'
-                        : 'border-transparent hover:scale-105'
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    title={color.name}
-                  >
-                    <div className="w-full h-8 rounded flex items-center justify-center">
-                      {accentColor === color.value && (
-                        <span className="text-white font-bold text-sm">✓</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-white mt-1 text-center font-medium">
-                      {color.name}
-                    </p>
-                  </button>
-                ))}
+          <Section title="Appearance">
+            <Row label="Theme">
+              <Segmented
+                label="Theme"
+                value={theme}
+                onChange={onThemeChange}
+                options={[
+                  { value: 'light', label: 'Light', icon: Sun },
+                  { value: 'dark', label: 'Dark', icon: Moon },
+                ]}
+              />
+            </Row>
+            <Row label="Accent color">
+              <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap justify-end gap-2">
+                {accentColors.map(color => {
+                  const selected = accentColor.toLowerCase() === color.value.toLowerCase();
+                  return (
+                    <button
+                      key={color.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      aria-label={color.name}
+                      title={color.name}
+                      onClick={() => onAccentColorChange(color.value)}
+                      className={`w-6 h-6 rounded-full transition-shadow ${
+                        selected ? 'shadow-[0_0_0_2px_var(--canvas),0_0_0_4px_var(--accent)]' : ''
+                      }`}
+                      style={{
+                        background: `linear-gradient(180deg, ${color.value}cc, ${color.value})`,
+                      }}
+                    />
+                  );
+                })}
               </div>
-            </div>
-          </section>
+            </Row>
+            <Row
+              label="Hardware acceleration"
+              hint="Turn off if text or images look garbled or noisy, as on older integrated graphics. Applies after restarting ClipVault."
+            >
+              {toggle('hardwareAcceleration', 'Hardware acceleration')}
+            </Row>
+          </Section>
 
-          {/* Clipboard Settings */}
-          <section>
-            <h3 className={`text-lg font-semibold mb-4 ${
-              theme === 'dark' ? 'text-white' : 'text-gray-900'
-            }`}>
-              Clipboard Settings
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Maximum Items (1-99999)
-                </label>
-                <NumberField
-                  min={1}
-                  max={99999}
-                  value={settings.maxItems}
-                  onCommit={(maxItems) => onUpdateSettings({ maxItems })}
-                  className={`w-full px-4 py-2 rounded-lg border ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                />
-                <p className={`mt-1 text-xs ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Lowering this removes the oldest items. Favorites are always kept.
-                </p>
-              </div>
+          <Section title="Clipboard">
+            <Row label="Record clipboard" hint="Save everything you copy. Also in the sidebar.">
+              {toggle('captureEnabled', 'Record clipboard')}
+            </Row>
+            <Row label="Items to keep" hint="Lowering this removes the oldest items. Favorites are always kept.">
+              <NumberField
+                min={1}
+                max={99999}
+                value={settings.maxItems}
+                onCommit={maxItems => onUpdateSettings({ maxItems })}
+                className={`${SMALL_FIELD} w-24 text-right shrink-0`}
+              />
+            </Row>
+            <Row label="Notify on new items" hint="A desktop notification for each copy while ClipVault is hidden.">
+              {toggle('notifications', 'Notify on new items')}
+            </Row>
+          </Section>
 
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Keep a copy of copied files up to (MB)
-                </label>
-                <NumberField
-                  min={0}
-                  max={10240}
-                  value={settings.snapshotLimitMb}
-                  onCommit={(snapshotLimitMb) => onUpdateSettings({ snapshotLimitMb })}
-                  className={`w-full px-4 py-2 rounded-lg border ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                />
-                <p className={`mt-1 text-xs ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Files you copy are saved in the vault when the whole copy fits this size, so they can be pasted even after being moved or deleted. 0 keeps only their paths.
-                </p>
-              </div>
+          <Section title="Files">
+            <Row
+              label="Save copies of files up to (MB)"
+              hint="Copied files are saved in the vault in the background when the whole copy fits, so they can be pasted after being moved or deleted. 0 keeps only their paths."
+            >
+              <NumberField
+                min={0}
+                max={10240}
+                value={settings.snapshotLimitMb}
+                onCommit={snapshotLimitMb => onUpdateSettings({ snapshotLimitMb })}
+                className={`${SMALL_FIELD} w-24 text-right shrink-0`}
+              />
+            </Row>
+            <Row
+              label='Apps chosen with "Always"'
+              hint={
+                openWithTypes.length === 0
+                  ? 'None yet. Opening a file lets you pick an app just once or always.'
+                  : `Opened straight away: ${openWithTypes.join(', ')}`
+              }
+            >
+              <button
+                type="button"
+                onClick={() => onUpdateSettings({ openWith: {} })}
+                disabled={openWithTypes.length === 0}
+                className="pill shrink-0 h-8 px-3 rounded-lg text-small font-medium disabled:opacity-40"
+              >
+                Reset
+              </button>
+            </Row>
+          </Section>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className={`block text-sm font-medium ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Record clipboard
-                  </label>
-                  <p className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    Save everything you copy (also toggled from the header)
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.captureEnabled}
-                    onChange={(e) => onUpdateSettings({ captureEnabled: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div 
-                    className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
-                    style={{ backgroundColor: settings.captureEnabled ? accentColor : undefined }}
-                  />
-                </label>
-              </div>
+          <Section title="Startup">
+            <Row label="Start on login" hint="Launch ClipVault hidden in the tray when you log in.">
+              {toggle('startOnBoot', 'Start on login')}
+            </Row>
+            <Row label="Keep running in the tray" hint="Closing the window keeps recording. Quit from the tray menu.">
+              {toggle('minimizeToTray', 'Keep running in the tray')}
+            </Row>
+          </Section>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className={`block text-sm font-medium ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Notify on new items
-                  </label>
-                  <p className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    Show a desktop notification for each new item while ClipVault is hidden
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.notifications}
-                    onChange={(e) => onUpdateSettings({ notifications: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div 
-                    className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
-                    style={{ backgroundColor: settings.notifications ? accentColor : undefined }}
-                  />
-                </label>
-              </div>
+          <BackupSection maxItems={settings.maxItems} />
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className={`block text-sm font-medium ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Start on boot
-                  </label>
-                  <p className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    Launch ClipVault hidden in the tray when you log in
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.startOnBoot}
-                    onChange={(e) => onUpdateSettings({ startOnBoot: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div 
-                    className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
-                    style={{ backgroundColor: settings.startOnBoot ? accentColor : undefined }}
-                  />
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className={`block text-sm font-medium ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Keep running in the tray
-                  </label>
-                  <p className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    Closing the window keeps capturing; quit from the tray menu
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.minimizeToTray}
-                    onChange={(e) => onUpdateSettings({ minimizeToTray: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div 
-                    className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
-                    style={{ backgroundColor: settings.minimizeToTray ? accentColor : undefined }}
-                  />
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className={`block text-sm font-medium ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Hardware acceleration
-                  </label>
-                  <p className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    Turn off if text or images look garbled or noisy (old integrated graphics). Applies after restarting ClipVault
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.hardwareAcceleration}
-                    onChange={(e) => onUpdateSettings({ hardwareAcceleration: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div 
-                    className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
-                    style={{ backgroundColor: settings.hardwareAcceleration ? accentColor : undefined }}
-                  />
-                </label>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <label className={`block text-sm font-medium ${
-                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Apps chosen with "Always"
-                  </label>
-                  <p className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    {Object.keys(settings.openWith).length === 0
-                      ? 'None yet. Opening a file lets you pick an app just once or always.'
-                      : `${Object.keys(settings.openWith).length} file type(s) open straight away: ${Object.keys(settings.openWith).join(', ')}`}
-                  </p>
-                </div>
-                <button
-                  onClick={() => onUpdateSettings({ openWith: {} })}
-                  disabled={Object.keys(settings.openWith).length === 0}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-sm border disabled:opacity-40 ${
-                    theme === 'dark'
-                      ? 'border-gray-600 text-gray-200 hover:bg-gray-800'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <BackupSection maxItems={settings.maxItems} theme={theme} accentColor={accentColor} />
-
-          {/* Keyboard Shortcuts */}
-          <section>
-            <h3 className={`text-lg font-semibold mb-4 ${
-              theme === 'dark' ? 'text-white' : 'text-gray-900'
-            }`}>
-              Keyboard Shortcuts
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Toggle App
-                </label>
-                <ShortcutField
-                  value={settings.shortcuts.toggleApp}
-                  onChange={(toggleApp) => onUpdateSettings({
-                    shortcuts: { ...settings.shortcuts, toggleApp }
-                  })}
-                  clearable
-                  className={`w-full px-4 py-2 rounded-lg border ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                />
-                <p className={`mt-1 text-xs ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Shows or hides ClipVault from anywhere. Backspace disables it.
-                </p>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Copy Selected Item
-                </label>
-                <ShortcutField
-                  value={settings.shortcuts.copySelected}
-                  onChange={(copySelected) => onUpdateSettings({
-                    shortcuts: { ...settings.shortcuts, copySelected }
-                  })}
-                  className={`w-full px-4 py-2 rounded-lg border ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                />
-                <p className={`mt-1 text-xs ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Copies the selected item and hides ClipVault so you can paste. Use the arrow keys to select.
-                </p>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${
-                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-                }`}>
-                  Delete Selected Item
-                </label>
-                <ShortcutField
-                  value={settings.shortcuts.deleteSelected}
-                  onChange={(deleteSelected) => onUpdateSettings({
-                    shortcuts: { ...settings.shortcuts, deleteSelected }
-                  })}
-                  className={`w-full px-4 py-2 rounded-lg border ${
-                    theme === 'dark'
-                      ? 'bg-gray-800 border-gray-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                />
-              </div>
-            </div>
-          </section>
+          <Section title="Keyboard shortcuts">
+            <Row label="Show or hide ClipVault" hint="Works from any app. Backspace turns it off.">
+              {shortcut('toggleApp', true)}
+            </Row>
+            <Row label="Copy selected item" hint="Copies and hides ClipVault so you can paste. Arrow keys select.">
+              {shortcut('copySelected')}
+            </Row>
+            <Row label="Delete selected item">{shortcut('deleteSelected')}</Row>
+          </Section>
         </div>
       </div>
     </div>
