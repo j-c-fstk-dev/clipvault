@@ -1,7 +1,7 @@
 {
   "name": "clipvault",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clipboard manager for Linux with full history, categories and backup",
   "license": "AGPL-3.0-only",
   "type": "module",

@@ -1,5 +1,6 @@
 //! Backend settings, persisted as JSON in the app config directory.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -22,7 +23,14 @@ pub struct Settings {
     pub start_on_boot: bool,
     /// Closing the window keeps ClipVault running in the tray.
     pub minimize_to_tray: bool,
+    /// GPU compositing in WebKit. Turning it off fixes garbled rendering on
+    /// old integrated graphics; read at startup (see [`apply_rendering`]).
+    pub hardware_acceleration: bool,
     pub shortcuts: Shortcuts,
+    /// Application chosen with "Always" in the open-with dialog, by content
+    /// type (e.g. `image/png` → `org.xfce.ristretto.desktop`). Only used by
+    /// ClipVault; the system defaults are left alone.
+    pub open_with: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -34,7 +42,9 @@ impl Default for Settings {
             notifications: false,
             start_on_boot: false,
             minimize_to_tray: true,
+            hardware_acceleration: true,
             shortcuts: Shortcuts::default(),
+            open_with: BTreeMap::new(),
         }
     }
 }
@@ -70,6 +80,33 @@ impl Settings {
     pub fn sanitized(mut self) -> Self {
         self.max_items = self.max_items.clamp(1, Self::MAX_ITEMS_LIMIT);
         self
+    }
+}
+
+/// Disables WebKit's GPU paths for this process when the saved settings
+/// turn hardware acceleration off. Must run before WebKit starts (and before
+/// other threads exist); environment overrides set by the user win.
+pub fn apply_rendering(identifier: &str) {
+    let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+    else {
+        return;
+    };
+    if SettingsFile::new(&config_home.join(identifier))
+        .load()
+        .hardware_acceleration
+    {
+        return;
+    }
+    for var in [
+        "WEBKIT_DISABLE_COMPOSITING_MODE",
+        "WEBKIT_DISABLE_DMABUF_RENDERER",
+    ] {
+        if std::env::var_os(var).is_none() {
+            std::env::set_var(var, "1");
+        }
     }
 }
 

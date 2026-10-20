@@ -28,9 +28,20 @@ const INCR_TIMEOUT: Duration = Duration::from_secs(30);
 /// Content to put on the clipboard.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outgoing {
-    Text { text: String, html: Option<String> },
-    Image { bytes: Vec<u8>, mime: String },
-    Files { paths: Vec<PathBuf> },
+    Text {
+        text: String,
+        html: Option<String>,
+    },
+    Image {
+        bytes: Vec<u8>,
+        mime: String,
+    },
+    Files {
+        paths: Vec<PathBuf>,
+        /// Contents of a single copied image file, also offered as an image
+        /// so apps that cannot take files (chats, editors) can paste it.
+        image: Option<(Vec<u8>, String)>,
+    },
 }
 
 /// The formats offered for `out`, best first.
@@ -55,7 +66,7 @@ pub(crate) fn offer_entries(out: &Outgoing) -> Vec<(Target, Vec<u8>)> {
         Outgoing::Image { bytes, mime } => Target::from_mime(mime)
             .map(|target| vec![(target, bytes.clone())])
             .unwrap_or_default(),
-        Outgoing::Files { paths } => {
+        Outgoing::Files { paths, image } => {
             let uris: Vec<String> = paths
                 .iter()
                 .filter_map(|p| url::Url::from_file_path(p).ok())
@@ -68,11 +79,17 @@ pub(crate) fn offer_entries(out: &Outgoing) -> Vec<(Target, Vec<u8>)> {
                 .map(|p| p.to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("\n");
-            vec![
+            let mut entries = vec![
                 (Target::UriList, uri_list.into_bytes()),
                 (Target::GnomeCopiedFiles, gnome.into_bytes()),
                 (Target::Utf8String, plain.into_bytes()),
-            ]
+            ];
+            if let Some((bytes, mime)) = image {
+                if let Some(target) = Target::from_mime(mime) {
+                    entries.push((target, bytes.clone()));
+                }
+            }
+            entries
         }
     }
 }
@@ -362,6 +379,7 @@ mod tests {
                 PathBuf::from("/home/me/My Docs/a.pdf"),
                 PathBuf::from("/tmp"),
             ],
+            image: None,
         };
         let entries = offer_entries(&files);
         let text = |i: usize| String::from_utf8(entries[i].1.clone()).unwrap();
@@ -377,5 +395,16 @@ mod tests {
         );
         assert_eq!(entries[2].0, Target::Utf8String);
         assert_eq!(text(2), "/home/me/My Docs/a.pdf\n/tmp");
+    }
+
+    #[test]
+    fn image_files_are_also_offered_as_images() {
+        let files = Outgoing::Files {
+            paths: vec![PathBuf::from("/tmp/shot.png")],
+            image: Some((vec![9, 9], "image/png".into())),
+        };
+        let entries = offer_entries(&files);
+        assert_eq!(entries[0].0, Target::UriList);
+        assert_eq!(entries.last().unwrap(), &(Target::Png, vec![9, 9]));
     }
 }

@@ -11,6 +11,8 @@ const defaultSettings: Settings = {
   notifications: false,
   startOnBoot: false,
   minimizeToTray: true,
+  hardwareAcceleration: true,
+  openWith: {},
   shortcuts: {
     toggleApp: 'Ctrl+Shift+V',
     copySelected: 'Ctrl+C',

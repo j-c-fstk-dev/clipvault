@@ -5,8 +5,10 @@ export interface FileInfo {
   name: string;
   isDir: boolean;
   size?: number;
-  /** stored: a copy is kept in the vault; too_large: only the path; unavailable: missing when copied */
-  status: 'stored' | 'too_large' | 'unavailable';
+  /** pending: being copied into the vault; stored: copy kept; too_large: only the path; unavailable: missing when copied */
+  status: 'pending' | 'stored' | 'too_large' | 'unavailable';
+  /** Still at `path`; when false it was moved or deleted. */
+  exists: boolean;
 }
 
 export interface ClipboardItem {
@@ -49,6 +51,20 @@ export interface ImportStats {
   pruned: number;
 }
 
+/** Mirrors `open::AppChoice` in src-tauri. */
+export interface AppChoice {
+  id: string;
+  name: string;
+  /** data: URL */
+  icon: string | null;
+  isDefault: boolean;
+}
+
+/** Mirrors `commands::OpenResult` in src-tauri. */
+export type OpenResult =
+  | { kind: 'opened' }
+  | { kind: 'choose'; name: string; contentType: string; description: string; apps: AppChoice[] };
+
 export type ViewMode = 'grid' | 'list';
 
 export type SortOption = 'date-asc' | 'date-desc' | 'name-asc' | 'name-desc';
@@ -65,6 +81,9 @@ export interface Settings {
   notifications: boolean;
   startOnBoot: boolean;
   minimizeToTray: boolean;
+  hardwareAcceleration: boolean;
+  /** App chosen with "Always", by content type. */
+  openWith: Record<string, string>;
   shortcuts: {
     toggleApp: string;
     copySelected: string;

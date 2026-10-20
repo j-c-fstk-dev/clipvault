@@ -11,13 +11,18 @@ pub mod backup;
 pub mod capture;
 mod commands;
 mod desktop;
+mod locate;
 pub mod model;
+mod open;
 pub mod serve;
 pub mod settings;
 pub mod store;
+mod track;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, RwLock};
+use std::thread;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
@@ -25,10 +30,11 @@ use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use crate::capture::Watcher;
 use crate::commands::CaptureStatus;
 use crate::desktop::Tray;
-use crate::model::Item;
+use crate::model::{Item, ItemKind};
 use crate::serve::ClipboardHandle;
 use crate::settings::{Settings, SettingsFile};
 use crate::store::Store;
+use crate::track::Tracker;
 
 /// Emitted with a [`CapturedPayload`] after each stored clipboard change.
 pub const CAPTURED_EVENT: &str = "clipboard-captured";
@@ -58,6 +64,8 @@ pub struct AppState {
     clipboard: Option<ClipboardHandle>,
     /// `None` when the desktop has no tray.
     tray: Option<Tray>,
+    /// Wakes the snapshot worker.
+    snapshots: Sender<()>,
 }
 
 impl AppState {
@@ -132,6 +140,51 @@ fn is_wayland_session() -> bool {
         || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland")
 }
 
+/// Starts the thread that copies captured files into the vault. It runs at
+/// idle I/O priority, so it only uses the disk when nothing else does (e.g.
+/// after the file manager finished pasting), and wakes on each send.
+fn start_snapshot_worker(app: AppHandle, store: Arc<Store>) -> Sender<()> {
+    let (wake, woken) = mpsc::channel::<()>();
+    let _ = wake.send(()); // finish copies interrupted by the last exit
+    let spawned = thread::Builder::new()
+        .name("snapshot-worker".into())
+        .spawn(move || {
+            lower_priority();
+            while woken.recv().is_ok() {
+                while woken.try_recv().is_ok() {} // coalesce bursts
+                match store.process_snapshots() {
+                    Ok(changed) if !changed.is_empty() => {
+                        let _ = app.emit(HISTORY_EVENT, ());
+                    }
+                    Ok(_) => {}
+                    Err(err) => log::error!("cannot copy files into the vault: {err}"),
+                }
+            }
+        });
+    if let Err(err) = spawned {
+        log::error!("cannot start snapshot worker: {err}");
+    }
+    wake
+}
+
+/// Idle I/O class and a higher nice value for the calling thread (both are
+/// per thread on Linux). Failures only mean normal priority.
+fn lower_priority() {
+    const IOPRIO_WHO_PROCESS: libc::c_long = 1;
+    const IOPRIO_CLASS_IDLE: libc::c_long = 3;
+    const IOPRIO_CLASS_SHIFT: libc::c_long = 13;
+    // SAFETY: plain syscalls on the current thread with valid arguments.
+    unsafe {
+        libc::syscall(
+            libc::SYS_ioprio_set,
+            IOPRIO_WHO_PROCESS,
+            0,
+            IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT,
+        );
+        libc::nice(10);
+    }
+}
+
 /// Starts the clipboard watcher and returns a handle for copying back, or
 /// why it could not start.
 fn start_capture(
@@ -139,6 +192,8 @@ fn start_capture(
     store: Arc<Store>,
     settings: Arc<RwLock<Settings>>,
     paused: Arc<AtomicBool>,
+    snapshots: Sender<()>,
+    tracker: Option<Tracker>,
 ) -> Result<ClipboardHandle, String> {
     let watcher = match Watcher::connect() {
         Ok(watcher) => watcher,
@@ -152,6 +207,13 @@ fn start_capture(
         let settings = settings.read().unwrap_or_else(|e| e.into_inner()).clone();
         match store.insert(captured, &settings) {
             Ok(inserted) => {
+                if inserted.snapshot_pending {
+                    let _ = snapshots.send(());
+                }
+                // Copied files may be cut: follow them if they move.
+                if let (Some(tracker), ItemKind::Files) = (&tracker, inserted.item.kind) {
+                    tracker.track(inserted.item.id);
+                }
                 if settings.notifications && inserted.is_new {
                     desktop::notify_capture(&app, &inserted.item);
                 }
@@ -176,7 +238,11 @@ fn start_capture(
     }
 }
 
+/// Must match `identifier` in tauri.conf.json (it names the config dir).
+const APP_IDENTIFIER: &str = "com.jorgecristo.clipvault";
+
 pub fn run() {
+    settings::apply_rendering(APP_IDENTIFIER);
     env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or("clipvault_lib=info"),
     )
@@ -203,11 +269,20 @@ pub fn run() {
 
             let handle = app.handle();
             let current = settings.read().unwrap_or_else(|e| e.into_inner()).clone();
+            let snapshots = start_snapshot_worker(handle.clone(), store.clone());
+            let relocated = handle.clone();
+            let tracker = Tracker::start(store.clone(), move || {
+                let _ = relocated.emit(HISTORY_EVENT, ());
+            })
+            .map_err(|err| log::warn!("moved files will not be followed: {err}"))
+            .ok();
             let capture = start_capture(
                 handle.clone(),
                 store.clone(),
                 settings.clone(),
                 paused.clone(),
+                snapshots.clone(),
+                tracker,
             );
             let tray = desktop::build_tray(handle, !current.capture_enabled, toggle_capture)
                 .map_err(|err| log::warn!("no tray icon: {err}"))
@@ -232,6 +307,7 @@ pub fn run() {
                 capture_error: capture.as_ref().err().cloned(),
                 clipboard: capture.ok(),
                 tray,
+                snapshots,
             });
             if !start_hidden {
                 desktop::show_main(handle);
@@ -259,6 +335,8 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::hide_window,
+            commands::open_file,
+            commands::open_file_with,
             commands::export_backup,
             commands::import_backup,
         ])

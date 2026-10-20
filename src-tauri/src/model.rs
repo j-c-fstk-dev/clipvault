@@ -121,6 +121,8 @@ impl Category {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SnapshotStatus {
+    /// Within the size limit; the copy is being made in the background.
+    Pending,
     /// A copy of the file lives in the vault.
     Stored,
     /// The copied files exceed the snapshot size limit; only the path is kept.
@@ -132,6 +134,7 @@ pub enum SnapshotStatus {
 impl SnapshotStatus {
     pub fn as_str(self) -> &'static str {
         match self {
+            SnapshotStatus::Pending => "pending",
             SnapshotStatus::Stored => "stored",
             SnapshotStatus::TooLarge => "too_large",
             SnapshotStatus::Unavailable => "unavailable",
@@ -140,6 +143,7 @@ impl SnapshotStatus {
 
     pub fn parse(s: &str) -> Option<Self> {
         match s {
+            "pending" => Some(SnapshotStatus::Pending),
             "stored" => Some(SnapshotStatus::Stored),
             "too_large" => Some(SnapshotStatus::TooLarge),
             "unavailable" => Some(SnapshotStatus::Unavailable),
@@ -160,6 +164,8 @@ pub struct FileEntry {
     /// Absolute path of the copy inside the vault, when stored.
     pub snapshot_path: Option<String>,
     pub status: SnapshotStatus,
+    /// Whether the original is still at `path`.
+    pub exists: bool,
 }
 
 /// A stored clipboard entry as sent to the UI.
@@ -201,10 +207,39 @@ pub fn classify_text(text: &str) -> Category {
     }
 }
 
-/// `folder` when every copied path is a directory, `file` otherwise.
+/// Image file extensions, lowercase, with the MIME type they are offered as.
+pub const IMAGE_EXTENSIONS: &[(&str, &str)] = &[
+    ("png", "image/png"),
+    ("jpg", "image/jpeg"),
+    ("jpeg", "image/jpeg"),
+    ("gif", "image/gif"),
+    ("webp", "image/webp"),
+    ("bmp", "image/bmp"),
+    ("svg", "image/svg+xml"),
+    ("avif", "image/avif"),
+    ("ico", "image/x-icon"),
+    ("tif", "image/tiff"),
+    ("tiff", "image/tiff"),
+];
+
+/// MIME type of an image file, judged by its extension.
+pub fn image_mime(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    IMAGE_EXTENSIONS
+        .iter()
+        .find(|(e, _)| *e == ext)
+        .map(|(_, mime)| *mime)
+}
+
+/// `folder` when every copied path is a directory, `image` when every one
+/// is an image file, `file` otherwise.
 pub fn classify_files(paths: &[PathBuf]) -> Category {
-    if !paths.is_empty() && paths.iter().all(|p| p.is_dir()) {
+    if paths.is_empty() {
+        Category::File
+    } else if paths.iter().all(|p| p.is_dir()) {
         Category::Folder
+    } else if paths.iter().all(|p| !p.is_dir() && image_mime(p).is_some()) {
+        Category::Image
     } else {
         Category::File
     }
@@ -292,6 +327,32 @@ mod tests {
         assert_eq!(classify_text("file:///etc/hosts"), Category::Text);
         assert_eq!(classify_text("npm install"), Category::Text);
         assert_eq!(classify_text(""), Category::Text);
+    }
+
+    #[test]
+    fn classifies_image_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let photo = dir.path().join("Photo.JPG");
+        let shot = dir.path().join("shot.png");
+        let doc = dir.path().join("notes.txt");
+        for f in [&photo, &shot, &doc] {
+            std::fs::write(f, "x").unwrap();
+        }
+        assert_eq!(image_mime(&photo), Some("image/jpeg"));
+        assert_eq!(image_mime(&doc), None);
+        assert_eq!(
+            classify_files(&[photo.clone(), shot.clone()]),
+            Category::Image
+        );
+        assert_eq!(classify_files(&[shot, doc]), Category::File);
+        assert_eq!(
+            classify_files(&[dir.path().to_path_buf()]),
+            Category::Folder
+        );
+        // A folder named like an image is still a folder.
+        let tricky = dir.path().join("album.png");
+        std::fs::create_dir(&tricky).unwrap();
+        assert_eq!(classify_files(&[tricky]), Category::Folder);
     }
 
     #[test]

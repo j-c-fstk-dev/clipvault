@@ -25,6 +25,11 @@ export const useTheme = () => {
     }
   }, []);
 
+  // Native controls (select popups, scrollbars) follow the app theme.
+  useEffect(() => {
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+
   const updateTheme = (newTheme: Theme) => {
     setTheme(newTheme);
     localStorage.setItem('clipvault-theme', newTheme);

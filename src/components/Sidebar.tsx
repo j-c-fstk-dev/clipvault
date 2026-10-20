@@ -33,7 +33,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   accentColor
 }) => {
   return (
-    <aside className={`w-64 backdrop-blur-lg border-r transition-all duration-300 ${
+    <aside className={`w-64 border-r transition-all duration-300 ${
       theme === 'dark' 
         ? 'bg-gray-900/50 border-gray-700' 
         : 'bg-white/50 border-gray-200'
@@ -89,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </nav>
         
         {/* Mascot Section */}
-        <div className={`mt-8 p-4 rounded-xl backdrop-blur-sm border transition-all duration-300 ${
+        <div className={`mt-8 p-4 rounded-xl border transition-all duration-300 ${
           theme === 'dark' 
             ? 'bg-gray-800/30 border-gray-600' 
             : 'bg-white/30 border-gray-300'

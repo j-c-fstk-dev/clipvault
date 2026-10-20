@@ -11,6 +11,8 @@ interface ItemModalProps {
   onRemoveTag: (id: string, tag: string) => void;
   onDeleteItem: (id: string) => void;
   onCopy: () => void;
+  /** Opens one of a file item's files. */
+  onOpenFile: (position: number) => void;
   theme: Theme;
   accentColor: AccentColor;
 }
@@ -23,6 +25,7 @@ const ItemModal: React.FC<ItemModalProps> = ({
   onRemoveTag,
   onDeleteItem,
   onCopy,
+  onOpenFile,
   theme,
   accentColor
 }) => {
@@ -57,11 +60,11 @@ const ItemModal: React.FC<ItemModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className={`max-w-4xl w-full max-h-[90vh] rounded-2xl backdrop-blur-lg border overflow-hidden ${
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`max-w-4xl w-full max-h-[90vh] rounded-2xl border overflow-hidden ${
         theme === 'dark' 
-          ? 'bg-gray-900/90 border-gray-700' 
-          : 'bg-white/90 border-gray-300'
+          ? 'bg-gray-900 border-gray-700' 
+          : 'bg-white border-gray-300'
       }`}>
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b ${
@@ -142,7 +145,7 @@ const ItemModal: React.FC<ItemModalProps> = ({
           ) : null}
 
           {item.files.length > 0 ? (
-            <FileSummary files={item.files} theme={theme} accentColor={accentColor} />
+            <FileSummary files={item.files} theme={theme} accentColor={accentColor} onOpen={onOpenFile} />
           ) : (
             <div className={`p-4 rounded-lg border ${
               theme === 'dark' 
