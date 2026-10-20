@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ClipboardList, Image, FileText, Link, Folder, File } from 'lucide-react';
-import Header from './components/Header';
+import Header, { SEARCH_INPUT_ID } from './components/Header';
 import Sidebar from './components/Sidebar';
 import ClipboardView from './components/ClipboardView';
 import SettingsPanel from './components/SettingsPanel';
@@ -11,7 +11,7 @@ import { useSettings } from './hooks/useSettings';
 import { useTheme } from './hooks/useTheme';
 
 function App() {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, saveError } = useSettings();
   const { theme, accentColor, setTheme, setAccentColor } = useTheme();
 
   const [activeCategory, setActiveCategory] = useState<ClipboardCategory | 'all'>('all');
@@ -21,6 +21,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [captureStatus, setCaptureStatus] = useState<CaptureStatus | null>(null);
+  const [focusToken, setFocusToken] = useState(0);
 
   const clipboard = useClipboard({
     search: searchQuery,
@@ -35,6 +36,18 @@ function App() {
       .getCaptureStatus()
       .then(setCaptureStatus)
       .catch(error => console.error('Failed to read capture status:', error));
+  }, []);
+
+  // Brought up from the tray or the global shortcut: ready to search.
+  useEffect(() => {
+    if (!backend.hasBackend) return;
+    const unlisten = backend.onWindowShown(() => {
+      document.getElementById(SEARCH_INPUT_ID)?.focus();
+      setFocusToken(token => token + 1);
+    });
+    return () => {
+      unlisten.then(stop => stop());
+    };
   }, []);
 
     const getCategoryIcon = (category: ClipboardCategory | 'all') => {
@@ -106,6 +119,10 @@ function App() {
                 onRemoveTag={clipboard.removeTag}
                 onDeleteItem={clipboard.deleteItem}
                 onCopyItem={clipboard.copyItem}
+                shortcuts={settings.shortcuts}
+                hideAfterKeyboardCopy={settings.minimizeToTray}
+                keyboardEnabled={!showSettings}
+                focusToken={focusToken}
                 theme={theme}
                 accentColor={accentColor}
               />
@@ -121,6 +138,7 @@ function App() {
               onThemeChange={setTheme}
               onAccentColorChange={setAccentColor}
               onClose={() => setShowSettings(false)}
+              saveError={saveError}
             />
           )}
         </div>

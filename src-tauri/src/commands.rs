@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::model::{Item, ItemKind, SnapshotStatus};
 use crate::serve::Outgoing;
@@ -127,8 +127,15 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 }
 
 #[tauri::command]
-pub fn update_settings(state: State<'_, AppState>, settings: Settings) -> CmdResult<Settings> {
-    state.update_settings(settings).map_err(|e| e.to_string())
+pub fn update_settings(app: AppHandle, settings: Settings) -> CmdResult<Settings> {
+    crate::apply_settings(&app, settings)
+}
+
+/// Sends the window to the tray, e.g. after copying an item so the user can
+/// paste where they were.
+#[tauri::command]
+pub fn hide_window(app: AppHandle) {
+    crate::desktop::hide_main(&app);
 }
 
 #[cfg(test)]

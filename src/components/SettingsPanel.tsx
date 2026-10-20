@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Moon, Sun } from 'lucide-react';
 import { Settings, Theme, AccentColor } from '../types';
+import { eventToAccelerator } from '../lib/shortcuts';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -10,6 +11,8 @@ interface SettingsPanelProps {
   onThemeChange: (theme: Theme) => void;
   onAccentColorChange: (color: AccentColor) => void;
   onClose: () => void;
+  /** Why the last change could not be saved, if it could not. */
+  saveError: string | null;
 }
 
 const accentColors = [
@@ -68,6 +71,50 @@ const NumberField: React.FC<NumberFieldProps> = ({ value, min, max, onCommit, cl
   );
 };
 
+interface ShortcutFieldProps {
+  value: string;
+  onChange: (accelerator: string) => void;
+  /** Allow clearing the shortcut with Backspace. */
+  clearable?: boolean;
+  className: string;
+}
+
+/** Records the next key combination pressed while focused. */
+const ShortcutField: React.FC<ShortcutFieldProps> = ({ value, onChange, clearable, className }) => {
+  const [recording, setRecording] = useState(false);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab') return;
+    e.preventDefault();
+    if (e.key === 'Escape') {
+      e.currentTarget.blur();
+      return;
+    }
+    if (clearable && e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      onChange('');
+      e.currentTarget.blur();
+      return;
+    }
+    const accelerator = eventToAccelerator(e);
+    if (accelerator) {
+      onChange(accelerator);
+      e.currentTarget.blur();
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      readOnly
+      value={recording ? 'Press a key combination…' : value || 'Disabled'}
+      onFocus={() => setRecording(true)}
+      onBlur={() => setRecording(false)}
+      onKeyDown={onKeyDown}
+      className={`${className} cursor-pointer caret-transparent`}
+    />
+  );
+};
+
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
   onUpdateSettings,
@@ -75,7 +122,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   accentColor,
   onThemeChange,
   onAccentColorChange,
-  onClose
+  onClose,
+  saveError
 }) => {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -105,6 +153,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
         {/* Content */}
         <div className="p-6 overflow-auto max-h-[70vh] space-y-8">
+          {saveError && (
+            <div role="alert" className="px-4 py-3 rounded-lg text-sm bg-red-600/10 text-red-500 border border-red-500/30">
+              Could not save settings: {saveError}
+            </div>
+          )}
           {/* Appearance */}
           <section>
             <h3 className={`text-lg font-semibold mb-4 ${
@@ -273,12 +326,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <label className={`block text-sm font-medium ${
                     theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
                   }`}>
-                    Show notifications
+                    Notify on new items
                   </label>
                   <p className={`text-xs ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
                   }`}>
-                    Get notified when items are saved
+                    Show a desktop notification for each new item while ClipVault is hidden
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -305,7 +358,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <p className={`text-xs ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
                   }`}>
-                    Launch ClipVault when system starts
+                    Launch ClipVault hidden in the tray when you log in
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -327,12 +380,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <label className={`block text-sm font-medium ${
                     theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
                   }`}>
-                    Minimize to system tray
+                    Keep running in the tray
                   </label>
                   <p className={`text-xs ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
                   }`}>
-                    Keep ClipVault running in background
+                    Closing the window keeps capturing; quit from the tray menu
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -366,18 +419,23 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }`}>
                   Toggle App
                 </label>
-                <input
-                  type="text"
+                <ShortcutField
                   value={settings.shortcuts.toggleApp}
-                  onChange={(e) => onUpdateSettings({ 
-                    shortcuts: { ...settings.shortcuts, toggleApp: e.target.value }
+                  onChange={(toggleApp) => onUpdateSettings({
+                    shortcuts: { ...settings.shortcuts, toggleApp }
                   })}
+                  clearable
                   className={`w-full px-4 py-2 rounded-lg border ${
                     theme === 'dark'
                       ? 'bg-gray-800 border-gray-600 text-white'
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
                 />
+                <p className={`mt-1 text-xs ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Shows or hides ClipVault from anywhere. Backspace disables it.
+                </p>
               </div>
 
               <div>
@@ -386,11 +444,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }`}>
                   Copy Selected Item
                 </label>
-                <input
-                  type="text"
+                <ShortcutField
                   value={settings.shortcuts.copySelected}
-                  onChange={(e) => onUpdateSettings({ 
-                    shortcuts: { ...settings.shortcuts, copySelected: e.target.value }
+                  onChange={(copySelected) => onUpdateSettings({
+                    shortcuts: { ...settings.shortcuts, copySelected }
                   })}
                   className={`w-full px-4 py-2 rounded-lg border ${
                     theme === 'dark'
@@ -398,6 +455,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
                 />
+                <p className={`mt-1 text-xs ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Copies the selected item and hides ClipVault so you can paste. Use the arrow keys to select.
+                </p>
               </div>
 
               <div>
@@ -406,11 +468,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }`}>
                   Delete Selected Item
                 </label>
-                <input
-                  type="text"
+                <ShortcutField
                   value={settings.shortcuts.deleteSelected}
-                  onChange={(e) => onUpdateSettings({ 
-                    shortcuts: { ...settings.shortcuts, deleteSelected: e.target.value }
+                  onChange={(deleteSelected) => onUpdateSettings({
+                    shortcuts: { ...settings.shortcuts, deleteSelected }
                   })}
                   className={`w-full px-4 py-2 rounded-lg border ${
                     theme === 'dark'

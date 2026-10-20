@@ -2,6 +2,9 @@ import React from 'react';
 import { Search, Grid3X3, List, Star, Settings, Clipboard, Pause, Play, AlertTriangle } from 'lucide-react';
 import { ViewMode, SortOption, Theme, AccentColor, CaptureStatus } from '../types';
 
+/** Focused when the window is brought up, so typing searches right away. */
+export const SEARCH_INPUT_ID = 'clipvault-search';
+
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -80,6 +83,7 @@ const Header: React.FC<HeaderProps> = ({
               theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
             }`} />
             <input
+              id={SEARCH_INPUT_ID}
               type="text"
               placeholder="Search clipboard history..."
               value={searchQuery}

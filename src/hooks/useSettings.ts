@@ -8,7 +8,7 @@ const defaultSettings: Settings = {
   maxItems: 1000,
   snapshotLimitMb: 25,
   captureEnabled: true,
-  notifications: true,
+  notifications: false,
   startOnBoot: false,
   minimizeToTray: true,
   shortcuts: {
@@ -18,9 +18,14 @@ const defaultSettings: Settings = {
   },
 };
 
-/** Settings stored by the backend; changes apply locally at once and are saved shortly after. */
+/**
+ * Settings stored by the backend. Changes apply locally at once and are
+ * saved shortly after; a rejected save (e.g. a shortcut another app holds)
+ * restores the saved settings and sets `saveError`.
+ */
 export const useSettings = () => {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -29,9 +34,12 @@ export const useSettings = () => {
       .getSettings()
       .then(setSettings)
       .catch(error => console.error('Failed to load settings:', error));
+    const unlisten = backend.onSettingsChanged(setSettings);
+    return () => {
+      clearTimeout(saveTimer.current);
+      unlisten.then(stop => stop());
+    };
   }, []);
-
-  useEffect(() => () => clearTimeout(saveTimer.current), []);
 
   const updateSettings = (changes: Partial<Settings>) => {
     const next = { ...settings, ...changes };
@@ -41,13 +49,20 @@ export const useSettings = () => {
     saveTimer.current = setTimeout(() => {
       backend
         .updateSettings(next)
-        .then(setSettings)
-        .catch(error => console.error('Failed to save settings:', error));
+        .then(saved => {
+          setSettings(saved);
+          setSaveError(null);
+        })
+        .catch(error => {
+          setSaveError(backend.errorMessage(error));
+          backend.getSettings().then(setSettings).catch(() => {});
+        });
     }, SAVE_DELAY_MS);
   };
 
   return {
     settings,
     updateSettings,
+    saveError,
   };
 };

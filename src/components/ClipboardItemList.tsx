@@ -11,6 +11,8 @@ interface ClipboardItemListProps {
   onDeleteItem: (id: string) => void;
   onCopy: () => void;
   onView: () => void;
+  /** Highlighted for keyboard actions. */
+  isSelected?: boolean;
   theme: Theme;
   accentColor: AccentColor;
 }
@@ -23,6 +25,7 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
   onDeleteItem,
   onCopy,
   onView,
+  isSelected = false,
   theme,
   accentColor
 }) => {
@@ -69,9 +72,13 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
         ? 'bg-gray-800/30 border-gray-600 hover:bg-gray-800/50' 
         : 'bg-white/30 border-gray-300 hover:bg-white/50'
     }`}
-    style={{ 
-      boxShadow: `0 2px 10px ${accentColor}10`,
-      borderColor: item.isFavorite ? accentColor : undefined
+    data-item-id={item.id}
+    aria-selected={isSelected}
+    style={{
+      boxShadow: isSelected
+        ? `0 0 0 2px ${accentColor}, 0 2px 10px ${accentColor}30`
+        : `0 2px 10px ${accentColor}10`,
+      borderColor: item.isFavorite || isSelected ? accentColor : undefined
     }}>
       {/* Thumbnail/Icon */}
       <div className="flex-shrink-0">

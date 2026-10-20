@@ -3,24 +3,27 @@
 //! An X11 watcher thread captures every clipboard change into a SQLite-backed
 //! [`store::Store`]; the React UI in `../src` reads it through the commands in
 //! [`commands`] and is notified of new captures with the
-//! [`CAPTURED_EVENT`] event.
+//! [`CAPTURED_EVENT`] event. [`desktop`] adds the tray icon, global shortcut
+//! and notifications; [`autostart`] the start-on-login entry.
 
+pub mod autostart;
 pub mod capture;
 mod commands;
+mod desktop;
 pub mod model;
 pub mod serve;
 pub mod settings;
 pub mod store;
 
-use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
 use crate::capture::Watcher;
 use crate::commands::CaptureStatus;
+use crate::desktop::Tray;
 use crate::model::Item;
 use crate::serve::ClipboardHandle;
 use crate::settings::{Settings, SettingsFile};
@@ -28,6 +31,9 @@ use crate::store::Store;
 
 /// Emitted with a [`CapturedPayload`] after each stored clipboard change.
 pub const CAPTURED_EVENT: &str = "clipboard-captured";
+/// Emitted with the new [`Settings`] whenever they change, including from
+/// the tray menu.
+pub const SETTINGS_EVENT: &str = "settings-changed";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +53,8 @@ pub struct AppState {
     capture_error: Option<String>,
     /// `None` when there is no X11 display.
     clipboard: Option<ClipboardHandle>,
+    /// `None` when the desktop has no tray.
+    tray: Option<Tray>,
 }
 
 impl AppState {
@@ -57,15 +65,6 @@ impl AppState {
             .clone()
     }
 
-    fn update_settings(&self, new: Settings) -> Result<Settings, Box<dyn Error>> {
-        let new = new.sanitized();
-        self.settings_file.save(&new)?;
-        *self.settings.write().unwrap_or_else(|e| e.into_inner()) = new.clone();
-        self.paused.store(!new.capture_enabled, Ordering::Relaxed);
-        self.store.prune(new.max_items)?;
-        Ok(new)
-    }
-
     fn capture_status(&self) -> CaptureStatus {
         CaptureStatus {
             available: self.capture_error.is_none(),
@@ -73,6 +72,55 @@ impl AppState {
             error: self.capture_error.clone(),
             wayland: is_wayland_session(),
         }
+    }
+}
+
+/// Validates, applies and saves new settings. Nothing is saved when the
+/// shortcut cannot be registered or the autostart entry cannot be written.
+pub(crate) fn apply_settings(app: &AppHandle, new: Settings) -> Result<Settings, String> {
+    let state = app.state::<AppState>();
+    let new = new.sanitized();
+    let old = state.settings();
+
+    if new.shortcuts.toggle_app != old.shortcuts.toggle_app {
+        if let Err(err) = desktop::register_toggle_shortcut(app, &new.shortcuts.toggle_app) {
+            let _ = desktop::register_toggle_shortcut(app, &old.shortcuts.toggle_app);
+            return Err(err);
+        }
+    }
+    if new.start_on_boot != old.start_on_boot {
+        set_autostart(app, new.start_on_boot)?;
+    }
+
+    state
+        .settings_file
+        .save(&new)
+        .map_err(|e| format!("cannot save settings: {e}"))?;
+    *state.settings.write().unwrap_or_else(|e| e.into_inner()) = new.clone();
+    state.paused.store(!new.capture_enabled, Ordering::Relaxed);
+    if let Some(tray) = &state.tray {
+        tray.set_paused(!new.capture_enabled);
+    }
+    state
+        .store
+        .prune(new.max_items)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(SETTINGS_EVENT, &new);
+    Ok(new)
+}
+
+fn set_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let config_home = app.path().config_dir().map_err(|e| e.to_string())?;
+    let exec = autostart::exec_path().map_err(|e| e.to_string())?;
+    autostart::set_enabled(&config_home, enabled, &exec)
+        .map_err(|e| format!("cannot update the autostart entry: {e}"))
+}
+
+fn toggle_capture(app: &AppHandle) {
+    let mut settings = app.state::<AppState>().settings();
+    settings.capture_enabled = !settings.capture_enabled;
+    if let Err(err) = apply_settings(app, settings) {
+        log::error!("cannot toggle capture: {err}");
     }
 }
 
@@ -101,6 +149,9 @@ fn start_capture(
         let settings = settings.read().unwrap_or_else(|e| e.into_inner()).clone();
         match store.insert(captured, &settings) {
             Ok(inserted) => {
+                if settings.notifications && inserted.is_new {
+                    desktop::notify_capture(&app, &inserted.item);
+                }
                 let payload = CapturedPayload {
                     item: inserted.item,
                     is_new: inserted.is_new,
@@ -128,8 +179,16 @@ pub fn run() {
     )
     .init();
 
+    let start_hidden = std::env::args().any(|a| a == autostart::HIDDEN_ARG);
+
     tauri::Builder::default()
-        .setup(|app| {
+        // Must come first: a second launch just brings up the running app.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            desktop::show_main(app);
+        }))
+        .plugin(desktop::shortcut_plugin())
+        .plugin(tauri_plugin_notification::init())
+        .setup(move |app| {
             let data_dir = app.path().app_data_dir()?;
             let settings_file = SettingsFile::new(&app.path().app_config_dir()?);
             let settings = settings_file.load();
@@ -138,12 +197,29 @@ pub fn run() {
             let store = Arc::new(Store::open(&data_dir)?);
             log::info!("history stored in {}", data_dir.display());
 
+            let handle = app.handle();
+            let current = settings.read().unwrap_or_else(|e| e.into_inner()).clone();
             let capture = start_capture(
-                app.handle().clone(),
+                handle.clone(),
                 store.clone(),
                 settings.clone(),
                 paused.clone(),
             );
+            let tray = desktop::build_tray(handle, !current.capture_enabled, toggle_capture)
+                .map_err(|err| log::warn!("no tray icon: {err}"))
+                .ok();
+            if let Err(err) =
+                desktop::register_toggle_shortcut(handle, &current.shortcuts.toggle_app)
+            {
+                log::warn!("global shortcut unavailable: {err}");
+            }
+            // Rewrite the entry so it follows the app if it was moved.
+            if current.start_on_boot {
+                if let Err(err) = set_autostart(handle, true) {
+                    log::warn!("{err}");
+                }
+            }
+
             app.manage(AppState {
                 store,
                 settings,
@@ -151,8 +227,21 @@ pub fn run() {
                 paused,
                 capture_error: capture.as_ref().err().cloned(),
                 clipboard: capture.ok(),
+                tray,
             });
+            if !start_hidden {
+                desktop::show_main(handle);
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+                if app.state::<AppState>().settings().minimize_to_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::query_items,
@@ -165,6 +254,7 @@ pub fn run() {
             commands::get_capture_status,
             commands::get_settings,
             commands::update_settings,
+            commands::hide_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");

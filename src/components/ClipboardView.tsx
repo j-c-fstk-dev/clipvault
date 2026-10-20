@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ClipboardItem, ViewMode, Theme, AccentColor } from '../types';
-import { errorMessage, hasBackend } from '../lib/backend';
+import { ClipboardItem, ViewMode, Theme, AccentColor, Settings } from '../types';
+import { errorMessage, hasBackend, hideWindow } from '../lib/backend';
+import { matchesAccelerator } from '../lib/shortcuts';
+import { SEARCH_INPUT_ID } from './Header';
 import ClipboardItemCard from './ClipboardItemCard';
 import ClipboardItemList from './ClipboardItemList';
 import ItemModal from './ItemModal';
@@ -19,6 +21,13 @@ interface ClipboardViewProps {
   onRemoveTag: (id: string, tag: string) => void;
   onDeleteItem: (id: string) => void;
   onCopyItem: (id: string) => Promise<unknown>;
+  shortcuts: Settings['shortcuts'];
+  /** Hide the window after copying with the keyboard, so the user can paste. */
+  hideAfterKeyboardCopy: boolean;
+  /** Keyboard actions are off while another panel (settings) is open. */
+  keyboardEnabled: boolean;
+  /** Changes when the window is brought up; selection returns to the top. */
+  focusToken: number;
   theme: Theme;
   accentColor: AccentColor;
 }
@@ -34,14 +43,30 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
   onRemoveTag,
   onDeleteItem,
   onCopyItem,
+  shortcuts,
+  hideAfterKeyboardCopy,
+  keyboardEnabled,
+  focusToken,
   theme,
   accentColor
 }) => {
   // Track the open item by id so it reflects updates (favorite, tags).
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
+  const [cursor, setCursor] = useState(0);
   const sentinel = useRef<HTMLDivElement>(null);
   const selectedItem = items.find(item => item.id === selectedId) ?? null;
+  const cursorIndex = Math.min(cursor, items.length - 1);
+  const cursorItem = cursorIndex >= 0 ? items[cursorIndex] : undefined;
+
+  useEffect(() => setCursor(0), [focusToken]);
+
+  useEffect(() => {
+    if (!cursorItem) return;
+    document
+      .querySelector(`[data-item-id="${cursorItem.id}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [cursorItem]);
 
   useEffect(() => {
     if (!toast) return;
@@ -61,12 +86,61 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
     return () => observer.disconnect();
   }, [hasMore, onLoadMore, items.length]);
 
-  const handleCopy = (id: string) => {
+  const handleCopy = (id: string, fromKeyboard = false) => {
     onCopyItem(id).then(
-      () => setToast({ message: 'Copied to clipboard', error: false }),
+      () => {
+        setToast({ message: 'Copied to clipboard', error: false });
+        if (fromKeyboard && hideAfterKeyboardCopy) hideWindow().catch(() => {});
+      },
       error => setToast({ message: `Could not copy: ${errorMessage(error)}`, error: true })
     );
   };
+
+  // Arrow keys move the selection; Enter opens it; the configured shortcuts
+  // copy or delete it; Escape closes the preview or hides the window.
+  useEffect(() => {
+    if (!keyboardEnabled) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (selectedId) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setSelectedId(null);
+        }
+        return;
+      }
+      const target = e.target as HTMLElement;
+      const inSearch = target.id === SEARCH_INPUT_ID;
+      const typing = !!target.closest('input, textarea, select, [contenteditable="true"]');
+      if (typing && !inSearch) return;
+
+      const move = (delta: number) => {
+        e.preventDefault();
+        setCursor(Math.max(0, Math.min(items.length - 1, cursorIndex + delta)));
+      };
+      if (e.key === 'ArrowDown' || (!typing && e.key === 'ArrowRight')) return move(1);
+      if (e.key === 'ArrowUp' || (!typing && e.key === 'ArrowLeft')) return move(-1);
+      if (e.key === 'Escape') {
+        if (hideAfterKeyboardCopy) hideWindow().catch(() => {});
+        return;
+      }
+      if (!cursorItem) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        setSelectedId(cursorItem.id);
+      } else if (matchesAccelerator(e, shortcuts.copySelected)) {
+        const input = target as HTMLInputElement;
+        // Let the search field copy its own selected text.
+        if (inSearch && input.selectionStart !== input.selectionEnd) return;
+        e.preventDefault();
+        handleCopy(cursorItem.id, true);
+      } else if (!typing && matchesAccelerator(e, shortcuts.deleteSelected)) {
+        e.preventDefault();
+        onDeleteItem(cursorItem.id);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   const toastView = toast && (
     <div
@@ -125,6 +199,7 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
               onDeleteItem={onDeleteItem}
               onCopy={() => handleCopy(item.id)}
               onView={() => setSelectedId(item.id)}
+              isSelected={item.id === cursorItem?.id}
               theme={theme}
               accentColor={accentColor}
             />
@@ -142,6 +217,7 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
               onDeleteItem={onDeleteItem}
               onCopy={() => handleCopy(item.id)}
               onView={() => setSelectedId(item.id)}
+              isSelected={item.id === cursorItem?.id}
               theme={theme}
               accentColor={accentColor}
             />

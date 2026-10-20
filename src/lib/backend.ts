@@ -99,6 +99,17 @@ export const getSettings = () => invoke<Settings>('get_settings');
 export const updateSettings = (settings: Settings) =>
   invoke<Settings>('update_settings', { settings });
 
+/** Sends the window to the tray. */
+export const hideWindow = () => invoke('hide_window');
+
+/** Calls `onChange` with the new settings, including changes made from the tray. */
+export const onSettingsChanged = (onChange: (settings: Settings) => void): Promise<UnlistenFn> =>
+  listen<Settings>('settings-changed', event => onChange(event.payload));
+
+/** Calls `onShown` when the window is brought up (tray, shortcut, second launch). */
+export const onWindowShown = (onShown: () => void): Promise<UnlistenFn> =>
+  listen('window-shown', onShown);
+
 /** Calls `onChange` whenever the backend stores a clipboard change. */
 export const onHistoryChanged = (onChange: () => void): Promise<UnlistenFn> =>
   listen('clipboard-captured', onChange);

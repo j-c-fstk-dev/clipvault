@@ -17,8 +17,10 @@ pub struct Settings {
     pub snapshot_limit_mb: u64,
     /// Record clipboard changes; false pauses capture.
     pub capture_enabled: bool,
+    /// Desktop notification for each new item while the window is hidden.
     pub notifications: bool,
     pub start_on_boot: bool,
+    /// Closing the window keeps ClipVault running in the tray.
     pub minimize_to_tray: bool,
     pub shortcuts: Shortcuts,
 }
@@ -29,7 +31,7 @@ impl Default for Settings {
             max_items: 1000,
             snapshot_limit_mb: 25,
             capture_enabled: true,
-            notifications: true,
+            notifications: false,
             start_on_boot: false,
             minimize_to_tray: true,
             shortcuts: Shortcuts::default(),
@@ -40,7 +42,9 @@ impl Default for Settings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Shortcuts {
+    /// Global show/hide shortcut; empty disables it.
     pub toggle_app: String,
+    /// In-window shortcuts for the selected item.
     pub copy_selected: String,
     pub delete_selected: String,
 }

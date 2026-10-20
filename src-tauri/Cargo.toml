@@ -15,7 +15,7 @@ path = "src/lib.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 x11rb = { version = "0.14.0", features = ["xfixes"] }
@@ -24,6 +24,10 @@ sha2 = "0.11.1"
 url = "2.5.8"
 log = "0.4.34"
 env_logger = "0.11.11"
+tauri-plugin-global-shortcut = "2.4.1"
+tauri-plugin-notification = "2.7.0"
+tauri-plugin-single-instance = "2.5.4"
+raw-window-handle = "0.6"
 
 [profile.release]
 codegen-units = 1

@@ -17,9 +17,9 @@
 
 ---
 
-> **Status:** early development. Capture, history, search and copying items
-> back work; tray, global shortcut and backups are next (see
-> [Roadmap](#-roadmap)).
+> **Status:** early development. Capture, history, search, copying back,
+> tray, global shortcut and autostart work; backups and release packages
+> are next (see [Roadmap](#-roadmap)).
 
 ## ✨ Features
 
@@ -35,6 +35,11 @@
   deleted, the saved copy is pasted instead
 - **Privacy** — content marked secret by password managers (e.g. KeePassXC)
   is never stored, and capture can be paused
+- **Always at hand** — lives in the tray; `Ctrl+Shift+V` (configurable)
+  brings it up from anywhere, arrow keys pick an item and `Ctrl+C` copies it
+  and gets out of the way so you can paste
+- **Starts with your session** (optional), hidden in the tray; optional
+  desktop notifications for new items
 - **Category tabs** — text, links, images, files and folders, plus an "All" view
 - **Grid and list views**, sorting by date or name, instant search over
   content, file paths and tags, smooth scrolling through large histories
@@ -43,8 +48,21 @@
 - **Full-screen preview** with metadata and quick actions
 - **Native and lightweight** — Rust backend with the system WebKitGTK, ~2 MB `.deb`
 
-Planned for the first release: tray icon, global shortcut, autostart,
-notifications and `.zip` export/import for backups.
+Planned for the first release: `.zip` export/import for backups and
+packages on the Releases page.
+
+### Keyboard
+
+| Keys | Action |
+|---|---|
+| `Ctrl+Shift+V` | Show / hide ClipVault from anywhere |
+| `↑` `↓` `←` `→` | Select an item |
+| `Enter` | Open the selected item |
+| `Ctrl+C` | Copy the selected item and hide ClipVault |
+| `Delete` | Delete the selected item |
+| `Esc` | Close the preview, or hide ClipVault |
+
+The show/hide, copy and delete shortcuts can be changed in Settings.
 
 ### Where data lives
 
@@ -118,6 +136,8 @@ clipvault/
 │   ├── src/
 │   │   ├── capture.rs       # X11 clipboard watcher (XFixes, INCR)
 │   │   ├── serve.rs         # Copying items back (selection owner, INCR)
+│   │   ├── desktop.rs       # Tray, global shortcut, notifications
+│   │   ├── autostart.rs     # ~/.config/autostart entry
 │   │   ├── store.rs         # SQLite history, images, file snapshots
 │   │   ├── model.rs         # Item types and parsing helpers
 │   │   ├── settings.rs      # settings.json
@@ -141,7 +161,7 @@ clipvault/
 - [x] **Stage 1 — Foundation:** Tauri 2 app, AGPL-3.0, CI
 - [x] **Stage 2 — Core:** X11 clipboard watcher (text, HTML, images, files), dedup, SQLite history, file snapshots, password-manager filtering
 - [x] **Stage 3 — UI wiring:** real data instead of mocks, copy back any format, persistent settings
-- [ ] **Stage 4 — System:** tray, global shortcut, autostart, notifications
+- [x] **Stage 4 — System:** tray, global shortcut, autostart, notifications
 - [ ] **Stage 5 — Backup:** `.zip` export / import with merge
 - [ ] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
