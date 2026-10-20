@@ -304,8 +304,10 @@ impl Watcher {
             return Ok(Vec::new());
         };
         Ok(bytes
-            .chunks_exact(4)
-            .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&c| u32::from_ne_bytes(c))
             .filter_map(|atom| self.atoms.by_atom.get(&atom).copied())
             .collect())
     }

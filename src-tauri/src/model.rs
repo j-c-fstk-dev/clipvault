@@ -222,7 +222,7 @@ pub fn decode_latin1(bytes: &[u8]) -> String {
 /// with a byte-order mark instead of UTF-8.
 pub fn decode_html(bytes: &[u8]) -> String {
     let utf16 = |bytes: &[u8], from: fn([u8; 2]) -> u16| {
-        let units: Vec<u16> = bytes.chunks_exact(2).map(|c| from([c[0], c[1]])).collect();
+        let units: Vec<u16> = bytes.as_chunks::<2>().0.iter().map(|&c| from(c)).collect();
         String::from_utf16_lossy(&units)
     };
     let text = match bytes {
