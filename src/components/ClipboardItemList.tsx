@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, Tag, Trash2, Copy, ExternalLink, Download, Eye, FileText, Link, Image, File, Folder } from 'lucide-react';
+import { Star, Tag, Trash2, Copy, Eye, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardItem, Theme, AccentColor } from '../types';
 
 interface ClipboardItemListProps {
@@ -109,7 +109,7 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
           </span>
         </div>
 
-        <p className={`text-sm leading-relaxed mb-2 ${
+        <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] mb-2 ${
           theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
         }`}>
           {formatContent(item.content)}

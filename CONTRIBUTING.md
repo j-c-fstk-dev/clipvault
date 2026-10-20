@@ -5,16 +5,20 @@ Thank you for your interest in contributing to ClipVault! We're excited to have 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18.0 or higher
-- npm or yarn package manager
+- [Rust](https://rustup.rs/) (stable)
+- Node.js 20+ and npm
 - Git for version control
-- A code editor (VS Code recommended)
+- Tauri system libraries (Debian / Ubuntu / Kali):
+  ```bash
+  sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+    librsvg2-dev libxdo-dev libssl-dev build-essential curl wget file patchelf
+  ```
 
 ### Development Setup
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/yourusername/clipvault.git
+   git clone https://github.com/<your-user>/clipvault.git
    cd clipvault
    ```
 
@@ -23,18 +27,21 @@ Thank you for your interest in contributing to ClipVault! We're excited to have 
    npm install
    ```
 
-3. **Start Development Server**
+3. **Run the Desktop App**
    ```bash
-   npm run dev
+   npm run tauri dev
    ```
 
-4. **Open in Browser**
-   Navigate to `http://localhost:5173`
+4. **Run the Checks Before Opening a PR**
+   ```bash
+   npm run lint && npm run build
+   cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+   ```
 
 ## 📋 How to Contribute
 
 ### 1. Choose an Issue
-- Browse [open issues](https://github.com/yourusername/clipvault/issues)
+- Browse [open issues](https://github.com/j-c-fstk-dev/clipvault/issues)
 - Look for issues labeled `good first issue` for beginners
 - Comment on the issue to let others know you're working on it
 
@@ -212,6 +219,14 @@ Active contributors may be invited to become maintainers with:
 - Commit access to the repository
 - Ability to review and merge pull requests
 - Input on project direction
+
+## ⚖️ Licensing of Contributions
+
+ClipVault is licensed under the [AGPL-3.0](LICENSE). The project may also be
+offered under a commercial license in the future, so contributions require
+agreeing to a Contributor License Agreement (CLA) that allows the maintainer
+to relicense them. The CLA process will be set up before external
+contributions are merged.
 
 ## 📜 Code of Conduct
 

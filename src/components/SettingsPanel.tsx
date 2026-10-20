@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Palette, Monitor, Moon, Sun } from 'lucide-react';
+import { X, Moon, Sun } from 'lucide-react';
 import { Settings, Theme, AccentColor } from '../types';
 
 interface SettingsPanelProps {
