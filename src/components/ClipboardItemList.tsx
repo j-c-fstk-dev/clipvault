@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Star, Tag, Trash2, Copy, Eye, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardItem, Theme, AccentColor } from '../types';
+import FileSummary from './FileSummary';
 
 interface ClipboardItemListProps {
   item: ClipboardItem;
@@ -109,11 +110,17 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
           </span>
         </div>
 
-        <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] mb-2 ${
-          theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-        }`}>
-          {formatContent(item.content)}
-        </p>
+        {item.files.length > 0 ? (
+          <div className="mb-2">
+            <FileSummary files={item.files} theme={theme} accentColor={accentColor} limit={3} />
+          </div>
+        ) : (
+          <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] mb-2 ${
+            theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+          }`}>
+            {formatContent(item.content)}
+          </p>
+        )}
 
         {/* Tags */}
         <div className="flex flex-wrap gap-1">

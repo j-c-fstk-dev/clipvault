@@ -1,16 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ClipboardList, Image, FileText, Link, Folder, File } from 'lucide-react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ClipboardView from './components/ClipboardView';
 import SettingsPanel from './components/SettingsPanel';
-import { ViewMode, SortOption, ClipboardCategory } from './types';
+import { ViewMode, SortOption, ClipboardCategory, CaptureStatus } from './types';
+import * as backend from './lib/backend';
 import { useClipboard } from './hooks/useClipboard';
 import { useSettings } from './hooks/useSettings';
 import { useTheme } from './hooks/useTheme';
 
 function App() {
-  const { clipboardItems, toggleFavorite, addTag, removeTag, deleteItem } = useClipboard();
   const { settings, updateSettings } = useSettings();
   const { theme, accentColor, setTheme, setAccentColor } = useTheme();
 
@@ -20,31 +20,22 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState<CaptureStatus | null>(null);
 
-  // Filter and sort items
-  const filteredItems = clipboardItems
-    .filter(item => {
-      const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
-      const matchesSearch = item.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesFavorites = !showFavoritesOnly || item.isFavorite;
+  const clipboard = useClipboard({
+    search: searchQuery,
+    category: activeCategory,
+    favoritesOnly: showFavoritesOnly,
+    sort: sortBy,
+  });
 
-      return matchesCategory && matchesSearch && matchesFavorites;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'date-asc':
-          return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-        case 'date-desc':
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        case 'name-asc':
-          return a.content.localeCompare(b.content);
-        case 'name-desc':
-          return b.content.localeCompare(a.content);
-        default:
-          return 0;
-      }
-    });
+  useEffect(() => {
+    if (!backend.hasBackend) return;
+    backend
+      .getCaptureStatus()
+      .then(setCaptureStatus)
+      .catch(error => console.error('Failed to read capture status:', error));
+  }, []);
 
     const getCategoryIcon = (category: ClipboardCategory | 'all') => {
       switch (category) {
@@ -57,10 +48,7 @@ function App() {
       }
     };
 
-    const getCategoryCount = (category: ClipboardCategory | 'all') => {
-      if (category === 'all') return clipboardItems.length;
-      return clipboardItems.filter(item => item.category === category).length;
-    };
+    const getCategoryCount = (category: ClipboardCategory | 'all') => clipboard.counts[category];
 
     return (
       <div className={`min-h-screen transition-all duration-300 ${
@@ -89,6 +77,9 @@ function App() {
             showFavoritesOnly={showFavoritesOnly}
             onShowFavoritesChange={setShowFavoritesOnly}
             onSettingsClick={() => setShowSettings(true)}
+            captureEnabled={settings.captureEnabled}
+            captureStatus={captureStatus}
+            onToggleCapture={() => updateSettings({ captureEnabled: !settings.captureEnabled })}
             theme={theme}
             accentColor={accentColor}
           />
@@ -105,12 +96,16 @@ function App() {
 
             <main className="flex-1 overflow-hidden">
               <ClipboardView
-                items={filteredItems}
+                items={clipboard.items}
+                hasMore={clipboard.hasMore}
+                onLoadMore={clipboard.loadMore}
+                isFiltered={searchQuery !== '' || showFavoritesOnly || activeCategory !== 'all'}
                 viewMode={viewMode}
-                onToggleFavorite={toggleFavorite}
-                onAddTag={addTag}
-                onRemoveTag={removeTag}
-                onDeleteItem={deleteItem}
+                onToggleFavorite={clipboard.toggleFavorite}
+                onAddTag={clipboard.addTag}
+                onRemoveTag={clipboard.removeTag}
+                onDeleteItem={clipboard.deleteItem}
+                onCopyItem={clipboard.copyItem}
                 theme={theme}
                 accentColor={accentColor}
               />

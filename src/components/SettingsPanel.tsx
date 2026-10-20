@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Moon, Sun } from 'lucide-react';
 import { Settings, Theme, AccentColor } from '../types';
 
@@ -26,6 +26,47 @@ const accentColors = [
   { name: 'Cyan', value: '#0891B2' },
   { name: 'Violet', value: '#7C3AED' },
 ];
+
+interface NumberFieldProps {
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (value: number) => void;
+  className: string;
+}
+
+/**
+ * Number input that applies its value on blur or Enter, so intermediate
+ * keystrokes (typing "500" passes through "5") never reach the backend.
+ */
+const NumberField: React.FC<NumberFieldProps> = ({ value, min, max, onCommit, className }) => {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+
+  const commit = () => {
+    const parsed = parseInt(draft, 10);
+    if (Number.isNaN(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, parsed));
+    setDraft(String(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
+      className={className}
+    />
+  );
+};
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
@@ -158,18 +199,46 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 }`}>
                   Maximum Items (1-99999)
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="99999"
+                <NumberField
+                  min={1}
+                  max={99999}
                   value={settings.maxItems}
-                  onChange={(e) => onUpdateSettings({ maxItems: parseInt(e.target.value) || 1000 })}
+                  onCommit={(maxItems) => onUpdateSettings({ maxItems })}
                   className={`w-full px-4 py-2 rounded-lg border ${
                     theme === 'dark'
                       ? 'bg-gray-800 border-gray-600 text-white'
                       : 'bg-white border-gray-300 text-gray-900'
                   }`}
                 />
+                <p className={`mt-1 text-xs ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Lowering this removes the oldest items. Favorites are always kept.
+                </p>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium mb-2 ${
+                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                }`}>
+                  Keep a copy of copied files up to (MB)
+                </label>
+                <NumberField
+                  min={0}
+                  max={10240}
+                  value={settings.snapshotLimitMb}
+                  onCommit={(snapshotLimitMb) => onUpdateSettings({ snapshotLimitMb })}
+                  className={`w-full px-4 py-2 rounded-lg border ${
+                    theme === 'dark'
+                      ? 'bg-gray-800 border-gray-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-900'
+                  }`}
+                />
+                <p className={`mt-1 text-xs ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Files you copy are saved in the vault when the whole copy fits this size, so they can be pasted even after being moved or deleted. 0 keeps only their paths.
+                </p>
               </div>
 
               <div className="flex items-center justify-between">
@@ -177,24 +246,24 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <label className={`block text-sm font-medium ${
                     theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
                   }`}>
-                    Auto-save clipboard items
+                    Record clipboard
                   </label>
                   <p className={`text-xs ${
                     theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
                   }`}>
-                    Automatically save all copied items
+                    Save everything you copy (also toggled from the header)
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={settings.autoSave}
-                    onChange={(e) => onUpdateSettings({ autoSave: e.target.checked })}
+                    checked={settings.captureEnabled}
+                    onChange={(e) => onUpdateSettings({ captureEnabled: e.target.checked })}
                     className="sr-only peer"
                   />
                   <div 
                     className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
-                    style={{ backgroundColor: settings.autoSave ? accentColor : undefined }}
+                    style={{ backgroundColor: settings.captureEnabled ? accentColor : undefined }}
                   />
                 </label>
               </div>

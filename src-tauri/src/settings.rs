@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// Mirrors `Settings` in `src/types`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -14,6 +15,12 @@ pub struct Settings {
     /// Copied files are snapshotted into the vault when their total size is
     /// at most this many megabytes. 0 disables snapshots.
     pub snapshot_limit_mb: u64,
+    /// Record clipboard changes; false pauses capture.
+    pub capture_enabled: bool,
+    pub notifications: bool,
+    pub start_on_boot: bool,
+    pub minimize_to_tray: bool,
+    pub shortcuts: Shortcuts,
 }
 
 impl Default for Settings {
@@ -21,6 +28,29 @@ impl Default for Settings {
         Self {
             max_items: 1000,
             snapshot_limit_mb: 25,
+            capture_enabled: true,
+            notifications: true,
+            start_on_boot: false,
+            minimize_to_tray: true,
+            shortcuts: Shortcuts::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Shortcuts {
+    pub toggle_app: String,
+    pub copy_selected: String,
+    pub delete_selected: String,
+}
+
+impl Default for Shortcuts {
+    fn default() -> Self {
+        Self {
+            toggle_app: "Ctrl+Shift+V".into(),
+            copy_selected: "Ctrl+C".into(),
+            delete_selected: "Delete".into(),
         }
     }
 }
@@ -94,15 +124,29 @@ mod tests {
         let custom = Settings {
             max_items: 50,
             snapshot_limit_mb: 0,
+            capture_enabled: false,
+            shortcuts: Shortcuts {
+                toggle_app: "Super+V".into(),
+                ..Shortcuts::default()
+            },
+            ..Settings::default()
         };
         file.save(&custom).unwrap();
         assert_eq!(file.load(), custom);
 
-        fs::write(dir.path().join("settings.json"), r#"{"maxItems": 7}"#).unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"maxItems": 7, "shortcuts": {"toggleApp": "Alt+V"}}"#,
+        )
+        .unwrap();
         assert_eq!(
             file.load(),
             Settings {
                 max_items: 7,
+                shortcuts: Shortcuts {
+                    toggle_app: "Alt+V".into(),
+                    ..Shortcuts::default()
+                },
                 ..Settings::default()
             }
         );

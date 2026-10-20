@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::types::Value;
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 
 use crate::model::{
     classify_files, classify_text, file_name, image_extension, png_dimensions, Captured, Category,
@@ -64,6 +66,67 @@ pub struct Inserted {
     pub is_new: bool,
     /// Items removed to respect `max_items`.
     pub pruned: Vec<i64>,
+}
+
+/// History order, matching `SortOption` in the UI.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Sort {
+    #[default]
+    DateDesc,
+    DateAsc,
+    NameAsc,
+    NameDesc,
+}
+
+impl Sort {
+    fn order_by(self) -> &'static str {
+        match self {
+            Sort::DateDesc => "last_used_at DESC, id DESC",
+            Sort::DateAsc => "last_used_at ASC, id ASC",
+            Sort::NameAsc => "content COLLATE NOCASE ASC, id ASC",
+            Sort::NameDesc => "content COLLATE NOCASE DESC, id DESC",
+        }
+    }
+}
+
+/// Filters and paging for [`Store::query`].
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Query {
+    /// Matches content (including file paths) and tags, case-insensitively
+    /// for ASCII.
+    pub search: String,
+    pub category: Option<Category>,
+    pub favorites_only: bool,
+    pub sort: Sort,
+    /// Page size; 0 means [`Query::DEFAULT_LIMIT`].
+    pub limit: u32,
+    pub offset: u32,
+}
+
+impl Query {
+    pub const DEFAULT_LIMIT: u32 = 100;
+    pub const MAX_LIMIT: u32 = 1000;
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Page {
+    pub items: Vec<Item>,
+    /// Matching items across all pages.
+    pub total: u64,
+}
+
+/// Number of items per category, for the sidebar.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Counts {
+    pub all: u64,
+    pub text: u64,
+    pub link: u64,
+    pub image: u64,
+    pub file: u64,
+    pub folder: u64,
 }
 
 pub struct Store {
@@ -252,19 +315,103 @@ impl Store {
 
     /// Most recently used first.
     pub fn list(&self, limit: u32, offset: u32) -> Result<Vec<Item>> {
+        Ok(self
+            .query(&Query {
+                limit,
+                offset,
+                ..Query::default()
+            })?
+            .items)
+    }
+
+    pub fn query(&self, query: &Query) -> Result<Page> {
+        let mut conditions = Vec::new();
+        let mut args = Vec::new();
+        let search = query.search.trim();
+        if !search.is_empty() {
+            let pattern = format!("%{}%", escape_like(search));
+            conditions.push(
+                "(content LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM item_tags t \
+                 WHERE t.item_id = items.id AND t.tag LIKE ? ESCAPE '\\'))",
+            );
+            args.push(Value::Text(pattern.clone()));
+            args.push(Value::Text(pattern));
+        }
+        if let Some(category) = query.category {
+            conditions.push("category = ?");
+            args.push(Value::Text(category.as_str().to_string()));
+        }
+        if query.favorites_only {
+            conditions.push("is_favorite = 1");
+        }
+        let filter = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
         let conn = self.conn();
+        let total: i64 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM items {filter}"),
+            params_from_iter(args.iter()),
+            |r| r.get(0),
+        )?;
+
+        let limit = match query.limit {
+            0 => Query::DEFAULT_LIMIT,
+            n => n.min(Query::MAX_LIMIT),
+        };
+        args.push(Value::Integer(limit.into()));
+        args.push(Value::Integer(query.offset.into()));
         let ids = {
-            let mut stmt = conn.prepare(
-                "SELECT id FROM items ORDER BY last_used_at DESC, id DESC LIMIT ?1 OFFSET ?2",
-            )?;
+            let mut stmt = conn.prepare(&format!(
+                "SELECT id FROM items {filter} ORDER BY {} LIMIT ? OFFSET ?",
+                query.sort.order_by()
+            ))?;
             let ids = stmt
-                .query_map(params![limit, offset], |r| r.get::<_, i64>(0))?
+                .query_map(params_from_iter(args.iter()), |r| r.get::<_, i64>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             ids
         };
-        ids.into_iter()
+        let items = ids
+            .into_iter()
             .filter_map(|id| self.load(&conn, id).transpose())
-            .collect()
+            .collect::<Result<_>>()?;
+        Ok(Page {
+            items,
+            total: total as u64,
+        })
+    }
+
+    pub fn counts(&self) -> Result<Counts> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT category, COUNT(*) FROM items GROUP BY category")?;
+        let mut counts = Counts::default();
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+        for row in rows {
+            let (category, n) = row?;
+            let n = n as u64;
+            counts.all += n;
+            match Category::parse(&category) {
+                Some(Category::Text) => counts.text += n,
+                Some(Category::Link) => counts.link += n,
+                Some(Category::Image) => counts.image += n,
+                Some(Category::File) => counts.file += n,
+                Some(Category::Folder) => counts.folder += n,
+                None => {}
+            }
+        }
+        Ok(counts)
+    }
+
+    /// Moves an item to the top, as when it is copied again.
+    pub fn touch(&self, id: i64) -> Result<Item> {
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE items SET last_used_at = ?1 WHERE id = ?2",
+            params![next_timestamp(&conn)?, id],
+        )?;
+        self.load(&conn, id)?.ok_or(StoreError::NotFound(id))
     }
 
     pub fn get(&self, id: i64) -> Result<Option<Item>> {
@@ -626,6 +773,18 @@ fn migrate(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Escapes `%`, `_` and `\\` for a `LIKE ... ESCAPE '\\'` pattern.
+fn escape_like(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// Current time in ms, but always later than any stored `last_used_at` so
 /// that recency order is strict even within the same millisecond.
 fn next_timestamp(conn: &Connection) -> Result<i64> {
@@ -833,6 +992,94 @@ mod tests {
             Err(StoreError::InvalidTag)
         ));
         assert_eq!(store.remove_tag(id, "work").unwrap().tags, vec!["urgent"]);
+    }
+
+    #[test]
+    fn queries_filter_sort_and_page() {
+        let (_dir, store) = open();
+        let s = Settings::default();
+        for t in [
+            "banana",
+            "Apple pie",
+            "https://apple.com",
+            "cherry",
+            "100%_done",
+        ] {
+            store.insert(text(t), &s).unwrap();
+        }
+        let id = store.list(1, 0).unwrap()[0].id; // "100%_done"
+        store.add_tag(id, "fruit-salad").unwrap();
+        let cherry = store.list(10, 0).unwrap()[1].id;
+        store.set_favorite(cherry, true).unwrap();
+
+        let contents = |q: Query| -> (Vec<String>, u64) {
+            let page = store.query(&q).unwrap();
+            (
+                page.items.into_iter().map(|i| i.content).collect(),
+                page.total,
+            )
+        };
+
+        let (found, total) = contents(Query {
+            search: "APPLE".into(),
+            ..Query::default()
+        });
+        assert_eq!(found, vec!["https://apple.com", "Apple pie"]);
+        assert_eq!(total, 2);
+
+        let (found, _) = contents(Query {
+            search: "fruit".into(),
+            ..Query::default()
+        });
+        assert_eq!(found, vec!["100%_done"], "matches tags");
+
+        let (found, _) = contents(Query {
+            search: "%_".into(),
+            ..Query::default()
+        });
+        assert_eq!(found, vec!["100%_done"], "LIKE wildcards are literal");
+
+        let (found, _) = contents(Query {
+            category: Some(Category::Link),
+            ..Query::default()
+        });
+        assert_eq!(found, vec!["https://apple.com"]);
+
+        let (found, _) = contents(Query {
+            favorites_only: true,
+            ..Query::default()
+        });
+        assert_eq!(found, vec!["cherry"]);
+
+        let (found, total) = contents(Query {
+            sort: Sort::NameAsc,
+            limit: 2,
+            offset: 1,
+            ..Query::default()
+        });
+        assert_eq!(found, vec!["Apple pie", "banana"]);
+        assert_eq!(total, 5);
+
+        assert_eq!(
+            store.counts().unwrap(),
+            Counts {
+                all: 5,
+                text: 4,
+                link: 1,
+                ..Counts::default()
+            }
+        );
+    }
+
+    #[test]
+    fn touch_moves_item_to_top() {
+        let (_dir, store) = open();
+        let s = Settings::default();
+        let first = store.insert(text("first"), &s).unwrap().item.id;
+        store.insert(text("second"), &s).unwrap();
+        store.touch(first).unwrap();
+        assert_eq!(store.list(1, 0).unwrap()[0].id, first);
+        assert!(matches!(store.touch(999), Err(StoreError::NotFound(999))));
     }
 
     #[test]

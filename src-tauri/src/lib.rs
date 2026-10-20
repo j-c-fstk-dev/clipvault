@@ -8,6 +8,7 @@
 pub mod capture;
 mod commands;
 pub mod model;
+pub mod serve;
 pub mod settings;
 pub mod store;
 
@@ -21,6 +22,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::capture::Watcher;
 use crate::commands::CaptureStatus;
 use crate::model::Item;
+use crate::serve::ClipboardHandle;
 use crate::settings::{Settings, SettingsFile};
 use crate::store::Store;
 
@@ -43,6 +45,8 @@ pub struct AppState {
     settings_file: SettingsFile,
     paused: Arc<AtomicBool>,
     capture_error: Option<String>,
+    /// `None` when there is no X11 display.
+    clipboard: Option<ClipboardHandle>,
 }
 
 impl AppState {
@@ -57,12 +61,9 @@ impl AppState {
         let new = new.sanitized();
         self.settings_file.save(&new)?;
         *self.settings.write().unwrap_or_else(|e| e.into_inner()) = new.clone();
+        self.paused.store(!new.capture_enabled, Ordering::Relaxed);
         self.store.prune(new.max_items)?;
         Ok(new)
-    }
-
-    fn set_paused(&self, paused: bool) {
-        self.paused.store(paused, Ordering::Relaxed);
     }
 
     fn capture_status(&self) -> CaptureStatus {
@@ -80,20 +81,22 @@ fn is_wayland_session() -> bool {
         || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland")
 }
 
-/// Starts the clipboard watcher; returns why it could not start, if so.
+/// Starts the clipboard watcher and returns a handle for copying back, or
+/// why it could not start.
 fn start_capture(
     app: AppHandle,
     store: Arc<Store>,
     settings: Arc<RwLock<Settings>>,
     paused: Arc<AtomicBool>,
-) -> Option<String> {
+) -> Result<ClipboardHandle, String> {
     let watcher = match Watcher::connect() {
         Ok(watcher) => watcher,
         Err(err) => {
             log::error!("clipboard capture unavailable: {err}");
-            return Some(format!("cannot connect to the X11 display: {err}"));
+            return Err(format!("cannot connect to the X11 display: {err}"));
         }
     };
+    let clipboard = watcher.handle();
     let spawned = watcher.spawn(paused, move |captured| {
         let settings = settings.read().unwrap_or_else(|e| e.into_inner()).clone();
         match store.insert(captured, &settings) {
@@ -113,9 +116,9 @@ fn start_capture(
     match spawned {
         Ok(_) => {
             log::info!("clipboard capture started");
-            None
+            Ok(clipboard)
         }
-        Err(err) => Some(format!("cannot start capture thread: {err}")),
+        Err(err) => Err(format!("cannot start capture thread: {err}")),
     }
 }
 
@@ -129,12 +132,13 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let settings_file = SettingsFile::new(&app.path().app_config_dir()?);
-            let settings = Arc::new(RwLock::new(settings_file.load()));
+            let settings = settings_file.load();
+            let paused = Arc::new(AtomicBool::new(!settings.capture_enabled));
+            let settings = Arc::new(RwLock::new(settings));
             let store = Arc::new(Store::open(&data_dir)?);
             log::info!("history stored in {}", data_dir.display());
 
-            let paused = Arc::new(AtomicBool::new(false));
-            let capture_error = start_capture(
+            let capture = start_capture(
                 app.handle().clone(),
                 store.clone(),
                 settings.clone(),
@@ -145,18 +149,20 @@ pub fn run() {
                 settings,
                 settings_file,
                 paused,
-                capture_error,
+                capture_error: capture.as_ref().err().cloned(),
+                clipboard: capture.ok(),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::list_items,
+            commands::query_items,
+            commands::get_counts,
+            commands::copy_item,
             commands::delete_item,
             commands::set_favorite,
             commands::add_tag,
             commands::remove_tag,
             commands::get_capture_status,
-            commands::set_capture_paused,
             commands::get_settings,
             commands::update_settings,
         ])
