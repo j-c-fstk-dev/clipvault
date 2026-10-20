@@ -4,12 +4,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 
+use crate::backup::{self, ExportStats};
 use crate::model::{Item, ItemKind, SnapshotStatus};
 use crate::serve::Outgoing;
 use crate::settings::Settings;
-use crate::store::{Counts, Page, Query};
+use crate::store::{Counts, ImportStats, Page, Query};
 use crate::AppState;
 
 type CmdResult<T> = Result<T, String>;
@@ -129,6 +131,67 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 #[tauri::command]
 pub fn update_settings(app: AppHandle, settings: Settings) -> CmdResult<Settings> {
     crate::apply_settings(&app, settings)
+}
+
+/// Asks where to save and writes a `.zip` backup of the whole history.
+/// Returns `None` if the user cancels.
+#[tauri::command]
+pub async fn export_backup(app: AppHandle) -> CmdResult<Option<ExportStats>> {
+    run_blocking(move || {
+        let Some(path) = app
+            .dialog()
+            .file()
+            .set_title("Export ClipVault backup")
+            .add_filter("ClipVault backup", &["zip"])
+            .set_file_name(backup::default_file_name(backup::now_ms()))
+            .blocking_save_file()
+        else {
+            return Ok(None);
+        };
+        let mut path = path.into_path().map_err(|e| e.to_string())?;
+        if path.extension().is_none_or(|ext| ext != "zip") {
+            path.as_mut_os_string().push(".zip");
+        }
+        let state = app.state::<AppState>();
+        backup::export(&state.store, &path)
+            .map(Some)
+            .map_err(|e| format!("export failed: {e}"))
+    })
+    .await
+}
+
+/// Asks for a backup and merges it into the history. Returns `None` if the
+/// user cancels.
+#[tauri::command]
+pub async fn import_backup(app: AppHandle) -> CmdResult<Option<ImportStats>> {
+    run_blocking(move || {
+        let Some(path) = app
+            .dialog()
+            .file()
+            .set_title("Import ClipVault backup")
+            .add_filter("ClipVault backup", &["zip"])
+            .blocking_pick_file()
+        else {
+            return Ok(None);
+        };
+        let path = path.into_path().map_err(|e| e.to_string())?;
+        let state = app.state::<AppState>();
+        let max_items = state.settings().max_items;
+        let stats = backup::import(&state.store, &path, state.store.data_dir(), max_items)
+            .map_err(|e| format!("import failed: {e}"))?;
+        let _ = app.emit(crate::HISTORY_EVENT, ());
+        Ok(Some(stats))
+    })
+    .await
+}
+
+/// Runs slow work (file dialogs, zipping) off the async runtime.
+async fn run_blocking<T: Send + 'static>(
+    work: impl FnOnce() -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Sends the window to the tray, e.g. after copying an item so the user can

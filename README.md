@@ -18,8 +18,8 @@
 ---
 
 > **Status:** early development. Capture, history, search, copying back,
-> tray, global shortcut and autostart work; backups and release packages
-> are next (see [Roadmap](#-roadmap)).
+> tray, global shortcut, autostart and backups work; release packages are
+> next (see [Roadmap](#-roadmap)).
 
 ## ✨ Features
 
@@ -40,6 +40,9 @@
   and gets out of the way so you can paste
 - **Starts with your session** (optional), hidden in the tray; optional
   desktop notifications for new items
+- **Backups** — export the whole history (images and saved file copies
+  included) to a `.zip` and import it on another machine; importing merges,
+  it never replaces
 - **Category tabs** — text, links, images, files and folders, plus an "All" view
 - **Grid and list views**, sorting by date or name, instant search over
   content, file paths and tags, smooth scrolling through large histories
@@ -48,8 +51,7 @@
 - **Full-screen preview** with metadata and quick actions
 - **Native and lightweight** — Rust backend with the system WebKitGTK, ~2 MB `.deb`
 
-Planned for the first release: `.zip` export/import for backups and
-packages on the Releases page.
+Planned for the first release: packages on the Releases page.
 
 ### Keyboard
 
@@ -138,6 +140,7 @@ clipvault/
 │   │   ├── serve.rs         # Copying items back (selection owner, INCR)
 │   │   ├── desktop.rs       # Tray, global shortcut, notifications
 │   │   ├── autostart.rs     # ~/.config/autostart entry
+│   │   ├── backup.rs        # .zip export / import
 │   │   ├── store.rs         # SQLite history, images, file snapshots
 │   │   ├── model.rs         # Item types and parsing helpers
 │   │   ├── settings.rs      # settings.json
@@ -162,7 +165,7 @@ clipvault/
 - [x] **Stage 2 — Core:** X11 clipboard watcher (text, HTML, images, files), dedup, SQLite history, file snapshots, password-manager filtering
 - [x] **Stage 3 — UI wiring:** real data instead of mocks, copy back any format, persistent settings
 - [x] **Stage 4 — System:** tray, global shortcut, autostart, notifications
-- [ ] **Stage 5 — Backup:** `.zip` export / import with merge
+- [x] **Stage 5 — Backup:** `.zip` export / import with merge
 - [ ] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
 

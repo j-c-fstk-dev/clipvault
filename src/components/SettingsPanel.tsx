@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { X, Moon, Sun } from 'lucide-react';
+import { X, Moon, Sun, Download, Upload } from 'lucide-react';
 import { Settings, Theme, AccentColor } from '../types';
 import { eventToAccelerator } from '../lib/shortcuts';
+import * as backend from '../lib/backend';
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -68,6 +69,91 @@ const NumberField: React.FC<NumberFieldProps> = ({ value, min, max, onCommit, cl
       onKeyDown={(e) => e.key === 'Enter' && commit()}
       className={className}
     />
+  );
+};
+
+const formatBytes = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+interface BackupSectionProps {
+  maxItems: number;
+  theme: Theme;
+  accentColor: AccentColor;
+}
+
+/** Export the history to a .zip, or merge one back in. */
+const BackupSection: React.FC<BackupSectionProps> = ({ maxItems, theme, accentColor }) => {
+  const [busy, setBusy] = useState<'export' | 'import' | null>(null);
+  const [result, setResult] = useState<{ message: string; error: boolean } | null>(null);
+
+  const run = async (kind: 'export' | 'import') => {
+    setBusy(kind);
+    setResult(null);
+    try {
+      if (kind === 'export') {
+        const stats = await backend.exportBackup();
+        if (stats) {
+          setResult({
+            message: `Saved ${plural(stats.items, 'item')} and ${plural(stats.files, 'file')} (${formatBytes(stats.bytes)}).`,
+            error: false,
+          });
+        }
+      } else {
+        const stats = await backend.importBackup();
+        if (stats) {
+          const parts = [`Added ${plural(stats.added, 'new item')}`];
+          if (stats.merged) parts.push(`${stats.merged} already in your history (tags and favorites combined)`);
+          let message = `${parts.join('; ')}.`;
+          if (stats.skipped) message += ` ${plural(stats.skipped, 'damaged entry')} ignored.`;
+          if (stats.pruned) {
+            message += ` ${plural(stats.pruned, 'oldest item')} removed to stay within the limit of ${maxItems} — raise "Maximum Items" first to keep everything.`;
+          }
+          setResult({ message, error: false });
+        }
+      }
+    } catch (error) {
+      setResult({ message: backend.errorMessage(error), error: true });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const button = (kind: 'export' | 'import', label: string, Icon: typeof Download) => (
+    <button
+      onClick={() => run(kind)}
+      disabled={busy !== null || !backend.hasBackend}
+      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+      style={{ backgroundColor: accentColor }}
+    >
+      <Icon className="w-4 h-4" />
+      {busy === kind ? `${kind === 'export' ? 'Exporting' : 'Importing'}…` : label}
+    </button>
+  );
+
+  return (
+    <section>
+      <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+        Backup
+      </h3>
+      <p className={`text-xs mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+        A .zip with your whole history: text, images, saved file copies, tags and favorites.
+        Importing merges into the current history; nothing is replaced.
+      </p>
+      <div className="flex gap-3">
+        {button('export', 'Export backup…', Download)}
+        {button('import', 'Import backup…', Upload)}
+      </div>
+      {result && (
+        <p
+          role="status"
+          className={`mt-3 text-sm ${result.error ? 'text-red-500' : theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}
+        >
+          {result.message}
+        </p>
+      )}
+    </section>
   );
 };
 
@@ -403,6 +489,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </div>
             </div>
           </section>
+
+          <BackupSection maxItems={settings.maxItems} theme={theme} accentColor={accentColor} />
 
           {/* Keyboard Shortcuts */}
           <section>

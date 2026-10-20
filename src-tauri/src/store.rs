@@ -4,7 +4,7 @@
 use std::fmt;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -127,6 +127,57 @@ pub struct Counts {
     pub image: u64,
     pub file: u64,
     pub folder: u64,
+}
+
+/// A complete item with paths relative to the data directory: the unit of
+/// backups. Mirrors the `items`, `item_files` and `item_tags` rows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemRecord {
+    pub hash: String,
+    pub kind: ItemKind,
+    pub category: Category,
+    pub content: String,
+    pub html: Option<String>,
+    pub mime: Option<String>,
+    /// Image file, `blobs/<hash>/...`.
+    pub blob: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub size: Option<u64>,
+    pub is_favorite: bool,
+    pub created_at: i64,
+    pub last_used_at: i64,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub files: Vec<FileRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRecord {
+    pub path: String,
+    pub name: String,
+    pub is_dir: bool,
+    pub size: Option<u64>,
+    /// Vault copy, `blobs/<hash>/...`.
+    pub snapshot: Option<String>,
+    pub status: SnapshotStatus,
+}
+
+/// Result of [`Store::import`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportStats {
+    /// Items that were not in the history yet.
+    pub added: usize,
+    /// Items already present; tags and favorites were combined.
+    pub merged: usize,
+    /// Malformed records that were ignored.
+    pub skipped: usize,
+    /// Oldest items removed afterwards to respect `max_items`.
+    pub pruned: usize,
 }
 
 pub struct Store {
@@ -471,6 +522,244 @@ impl Store {
         self.load(&conn, id)?.ok_or(StoreError::NotFound(id))
     }
 
+    /// Every item, most recently used first.
+    pub fn records(&self) -> Result<Vec<ItemRecord>> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, hash, kind, category, content, html, mime, blob, width, height, size,
+                    is_favorite, created_at, last_used_at
+             FROM items ORDER BY last_used_at DESC, id DESC",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                let kind: String = r.get(2)?;
+                let category: String = r.get(3)?;
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    ItemRecord {
+                        hash: r.get(1)?,
+                        kind: ItemKind::parse(&kind).unwrap_or(ItemKind::Text),
+                        category: Category::parse(&category).unwrap_or(Category::Text),
+                        content: r.get(4)?,
+                        html: r.get(5)?,
+                        mime: r.get(6)?,
+                        blob: r.get(7)?,
+                        width: r.get(8)?,
+                        height: r.get(9)?,
+                        size: r.get::<_, Option<i64>>(10)?.map(|s| s as u64),
+                        is_favorite: r.get(11)?,
+                        created_at: r.get(12)?,
+                        last_used_at: r.get(13)?,
+                        tags: Vec::new(),
+                        files: Vec::new(),
+                    },
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
+        let mut files = conn.prepare_cached(
+            "SELECT path, name, is_dir, size, snapshot, status FROM item_files
+             WHERE item_id = ?1 ORDER BY position",
+        )?;
+        let mut tags =
+            conn.prepare_cached("SELECT tag FROM item_tags WHERE item_id = ?1 ORDER BY rowid")?;
+        rows.into_iter()
+            .map(|(id, mut record)| {
+                record.files = files
+                    .query_map([id], |r| {
+                        let status: String = r.get(5)?;
+                        Ok(FileRecord {
+                            path: r.get(0)?,
+                            name: r.get(1)?,
+                            is_dir: r.get(2)?,
+                            size: r.get::<_, Option<i64>>(3)?.map(|s| s as u64),
+                            snapshot: r.get(4)?,
+                            status: SnapshotStatus::parse(&status)
+                                .unwrap_or(SnapshotStatus::Unavailable),
+                        })
+                    })?
+                    .collect::<rusqlite::Result<_>>()?;
+                record.tags = tags
+                    .query_map([id], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                Ok(record)
+            })
+            .collect()
+    }
+
+    /// Where the database and blobs live.
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    /// Directory holding an item's image or file snapshots.
+    pub fn blob_dir(&self, hash: &str) -> PathBuf {
+        self.data_dir.join(BLOBS_DIR).join(hash)
+    }
+
+    /// Merges `records` into the history. New items take their blobs from
+    /// `blobs_src/<hash>/` (moved, not copied); items already present keep
+    /// theirs and gain the record's tags and favorite flag. Records with a
+    /// malformed hash are skipped, and blob paths outside `blobs/<hash>/`
+    /// are dropped.
+    pub fn import(
+        &self,
+        records: Vec<ItemRecord>,
+        blobs_src: &Path,
+        max_items: u32,
+    ) -> Result<ImportStats> {
+        let mut stats = ImportStats::default();
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        for mut record in records {
+            if !is_valid_hash(&record.hash) {
+                stats.skipped += 1;
+                continue;
+            }
+            let hash = record.hash.clone();
+            let existing: Option<i64> = tx
+                .query_row("SELECT id FROM items WHERE hash = ?1", [&hash], |r| {
+                    r.get(0)
+                })
+                .optional()?;
+            let id = match existing {
+                Some(id) => {
+                    tx.execute(
+                        "UPDATE items SET is_favorite = MAX(is_favorite, ?1),
+                                          created_at = MIN(created_at, ?2),
+                                          last_used_at = MAX(last_used_at, ?3)
+                         WHERE id = ?4",
+                        params![
+                            record.is_favorite,
+                            record.created_at,
+                            record.last_used_at,
+                            id
+                        ],
+                    )?;
+                    // A local copy without its image or snapshots (e.g. the
+                    // files were deleted before it was captured here) takes
+                    // the backup's.
+                    if !self.blob_dir(&hash).exists() {
+                        sanitize_record(&mut record);
+                        if self.adopt_blobs(&hash, blobs_src)? {
+                            tx.execute(
+                                "UPDATE items SET blob = COALESCE(blob, ?1) WHERE id = ?2",
+                                params![record.blob, id],
+                            )?;
+                            let mut restored = false;
+                            for (position, file) in record.files.iter().enumerate() {
+                                if file.snapshot.is_some() {
+                                    // The backup saw the files when they still
+                                    // existed, so its details are the accurate ones.
+                                    restored |= tx.execute(
+                                        "UPDATE item_files SET snapshot = ?1, status = ?2,
+                                                               is_dir = ?3, size = COALESCE(size, ?4)
+                                         WHERE item_id = ?5 AND position = ?6 AND snapshot IS NULL",
+                                        params![
+                                            file.snapshot,
+                                            SnapshotStatus::Stored.as_str(),
+                                            file.is_dir,
+                                            file.size.map(|s| s as i64),
+                                            id,
+                                            position as i64
+                                        ],
+                                    )? > 0;
+                                }
+                            }
+                            if restored {
+                                tx.execute(
+                                    "UPDATE items SET category = ?1, size = COALESCE(size, ?2)
+                                     WHERE id = ?3",
+                                    params![
+                                        record.category.as_str(),
+                                        record.size.map(|s| s as i64),
+                                        id
+                                    ],
+                                )?;
+                            }
+                        }
+                    }
+                    stats.merged += 1;
+                    id
+                }
+                None => {
+                    sanitize_record(&mut record);
+                    self.adopt_blobs(&hash, blobs_src)?;
+                    tx.execute(
+                        "INSERT INTO items (hash, kind, category, content, html, mime, blob,
+                                            width, height, size, is_favorite, created_at,
+                                            last_used_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                        params![
+                            hash,
+                            record.kind.as_str(),
+                            record.category.as_str(),
+                            record.content,
+                            record.html,
+                            record.mime,
+                            record.blob,
+                            record.width,
+                            record.height,
+                            record.size.map(|s| s as i64),
+                            record.is_favorite,
+                            record.created_at,
+                            record.last_used_at,
+                        ],
+                    )?;
+                    let id = tx.last_insert_rowid();
+                    for (position, file) in record.files.iter().enumerate() {
+                        tx.execute(
+                            "INSERT INTO item_files (item_id, position, path, name, is_dir, size,
+                                                     snapshot, status)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                            params![
+                                id,
+                                position as i64,
+                                file.path,
+                                file.name,
+                                file.is_dir,
+                                file.size.map(|s| s as i64),
+                                file.snapshot,
+                                file.status.as_str(),
+                            ],
+                        )?;
+                    }
+                    stats.added += 1;
+                    id
+                }
+            };
+            for tag in &record.tags {
+                let tag = tag.trim();
+                if !tag.is_empty() && tag.chars().count() <= MAX_TAG_LEN {
+                    tx.execute(
+                        "INSERT OR IGNORE INTO item_tags (item_id, tag) VALUES (?1, ?2)",
+                        params![id, tag],
+                    )?;
+                }
+            }
+        }
+        tx.commit()?;
+        stats.pruned = self.prune_locked(&conn, max_items)?.len();
+        Ok(stats)
+    }
+
+    /// Moves `blobs_src/<hash>/` into the data directory, replacing any
+    /// leftover. Returns whether there was anything to move.
+    fn adopt_blobs(&self, hash: &str, blobs_src: &Path) -> Result<bool> {
+        let src = blobs_src.join(hash);
+        if !src.is_dir() {
+            return Ok(false);
+        }
+        let dest = self.blob_dir(hash);
+        if dest.exists() {
+            fs::remove_dir_all(&dest)?;
+        }
+        if fs::rename(&src, &dest).is_err() {
+            copy_dir(&src, &dest)?;
+        }
+        Ok(true)
+    }
+
     /// Removes the oldest non-favorite items beyond `max_items`.
     pub fn prune(&self, max_items: u32) -> Result<Vec<i64>> {
         let conn = self.conn();
@@ -771,6 +1060,34 @@ fn migrate(conn: &Connection) -> Result<()> {
     }
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
+}
+
+/// Item hashes are lowercase hex SHA-256; they name blob directories, so
+/// anything else is rejected.
+pub fn is_valid_hash(hash: &str) -> bool {
+    hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// Drops a record's blob paths that point outside its `blobs/<hash>/`.
+fn sanitize_record(record: &mut ItemRecord) {
+    record.blob = sanitize_blob_path(&record.hash, record.blob.take());
+    for file in &mut record.files {
+        file.snapshot = sanitize_blob_path(&record.hash, file.snapshot.take());
+        if file.snapshot.is_none() && file.status == SnapshotStatus::Stored {
+            file.status = SnapshotStatus::Unavailable;
+        }
+    }
+}
+
+/// Keeps `path` only if it points inside `blobs/<hash>/`.
+fn sanitize_blob_path(hash: &str, path: Option<String>) -> Option<String> {
+    let path = path?;
+    let rest = path.strip_prefix(&format!("{BLOBS_DIR}/{hash}/"))?;
+    let safe = !rest.is_empty()
+        && Path::new(rest)
+            .components()
+            .all(|c| matches!(c, Component::Normal(_)));
+    safe.then_some(path)
 }
 
 /// Escapes `%`, `_` and `\\` for a `LIKE ... ESCAPE '\\'` pattern.
@@ -1080,6 +1397,170 @@ mod tests {
         store.touch(first).unwrap();
         assert_eq!(store.list(1, 0).unwrap()[0].id, first);
         assert!(matches!(store.touch(999), Err(StoreError::NotFound(999))));
+    }
+
+    #[test]
+    fn exports_and_imports_records_with_merge() {
+        let s = Settings::default();
+        let (src_dir, src) = open();
+        let image = src
+            .insert(
+                Captured::Image {
+                    bytes: b"\x89PNG fake".to_vec(),
+                    mime: "image/png".into(),
+                },
+                &s,
+            )
+            .unwrap()
+            .item;
+        let shared = src.insert(text("in both"), &s).unwrap().item.id;
+        src.add_tag(shared, "from-backup").unwrap();
+        src.set_favorite(shared, true).unwrap();
+        let records = src.records().unwrap();
+        assert_eq!(records.len(), 2);
+
+        let (_dst_dir, dst) = open();
+        let local = dst.insert(text("in both"), &s).unwrap().item.id;
+        dst.add_tag(local, "local").unwrap();
+        dst.insert(text("only here"), &s).unwrap();
+
+        // Blobs come from a directory laid out like the backup's blobs/.
+        let staging = tempfile::tempdir().unwrap();
+        let hash = records
+            .iter()
+            .find(|r| r.kind == ItemKind::Image)
+            .unwrap()
+            .hash
+            .clone();
+        copy_dir(
+            &src_dir.path().join(BLOBS_DIR).join(&hash),
+            &staging.path().join(&hash),
+        )
+        .unwrap();
+
+        let stats = dst.import(records, staging.path(), 1000).unwrap();
+        assert_eq!(
+            stats,
+            ImportStats {
+                added: 1,
+                merged: 1,
+                skipped: 0,
+                pruned: 0
+            }
+        );
+        let merged = dst.get(local).unwrap().unwrap();
+        assert!(merged.is_favorite);
+        assert_eq!(merged.tags, vec!["local", "from-backup"]);
+
+        let imported = dst
+            .list(10, 0)
+            .unwrap()
+            .into_iter()
+            .find(|i| i.kind == ItemKind::Image)
+            .unwrap();
+        assert_eq!(imported.created_at, image.created_at);
+        assert_eq!(
+            fs::read(imported.image_path.unwrap()).unwrap(),
+            b"\x89PNG fake"
+        );
+        assert_eq!(dst.count().unwrap(), 3);
+    }
+
+    #[test]
+    fn merge_restores_snapshots_missing_locally() {
+        let s = Settings::default();
+        let files = tempfile::tempdir().unwrap();
+        let doc = files.path().join("docs");
+        fs::create_dir(&doc).unwrap();
+        fs::write(doc.join("a.txt"), "precious").unwrap();
+
+        let (src_dir, src) = open();
+        src.insert(
+            Captured::Files {
+                paths: vec![doc.clone()],
+            },
+            &s,
+        )
+        .unwrap();
+        let records = src.records().unwrap();
+        let hash = records[0].hash.clone();
+
+        // The folder is gone by the time it is copied on the other machine.
+        fs::remove_dir_all(&doc).unwrap();
+        let (_dst_dir, dst) = open();
+        let local = dst
+            .insert(
+                Captured::Files {
+                    paths: vec![doc.clone()],
+                },
+                &s,
+            )
+            .unwrap()
+            .item;
+        assert_eq!(local.files[0].status, SnapshotStatus::Unavailable);
+        assert_eq!(
+            local.category,
+            Category::File,
+            "cannot tell it was a folder"
+        );
+
+        let staging = tempfile::tempdir().unwrap();
+        copy_dir(
+            &src_dir.path().join(BLOBS_DIR).join(&hash),
+            &staging.path().join(&hash),
+        )
+        .unwrap();
+        let stats = dst.import(records, staging.path(), 1000).unwrap();
+        assert_eq!((stats.added, stats.merged), (0, 1));
+
+        let restored = dst.get(local.id).unwrap().unwrap();
+        assert_eq!(restored.files[0].status, SnapshotStatus::Stored);
+        assert!(restored.files[0].is_dir);
+        assert_eq!(restored.category, Category::Folder);
+        let snapshot = PathBuf::from(restored.files[0].snapshot_path.as_ref().unwrap());
+        assert_eq!(
+            fs::read_to_string(snapshot.join("a.txt")).unwrap(),
+            "precious"
+        );
+    }
+
+    #[test]
+    fn import_rejects_unsafe_records() {
+        let (dir, store) = open();
+        let good_hash = "a".repeat(64);
+        let record = |hash: &str, blob: &str| ItemRecord {
+            hash: hash.into(),
+            kind: ItemKind::Image,
+            category: Category::Image,
+            content: "x".into(),
+            html: None,
+            mime: Some("image/png".into()),
+            blob: Some(blob.into()),
+            width: None,
+            height: None,
+            size: None,
+            is_favorite: false,
+            created_at: 1,
+            last_used_at: 1,
+            tags: vec![],
+            files: vec![],
+        };
+        let stats = store
+            .import(
+                vec![
+                    record("../../etc", "blobs/../../etc/passwd"),
+                    record(
+                        &good_hash,
+                        &format!("blobs/{good_hash}/../../../escape.png"),
+                    ),
+                ],
+                dir.path(),
+                1000,
+            )
+            .unwrap();
+        assert_eq!((stats.added, stats.skipped), (1, 1));
+        let item = &store.list(10, 0).unwrap()[0];
+        assert_eq!(item.image_path, None, "path escaping blobs/<hash>/ dropped");
     }
 
     #[test]

@@ -34,6 +34,21 @@ export interface CaptureStatus {
   wayland: boolean;
 }
 
+/** Mirrors `backup::ExportStats` in src-tauri. */
+export interface ExportStats {
+  items: number;
+  files: number;
+  bytes: number;
+}
+
+/** Mirrors `store::ImportStats` in src-tauri. */
+export interface ImportStats {
+  added: number;
+  merged: number;
+  skipped: number;
+  pruned: number;
+}
+
 export type ViewMode = 'grid' | 'list';
 
 export type SortOption = 'date-asc' | 'date-desc' | 'name-asc' | 'name-desc';

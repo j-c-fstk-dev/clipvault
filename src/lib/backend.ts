@@ -5,6 +5,8 @@ import {
   CategoryCounts,
   ClipboardCategory,
   ClipboardItem,
+  ExportStats,
+  ImportStats,
   Settings,
   SortOption,
 } from '../types';
@@ -110,9 +112,20 @@ export const onSettingsChanged = (onChange: (settings: Settings) => void): Promi
 export const onWindowShown = (onShown: () => void): Promise<UnlistenFn> =>
   listen('window-shown', onShown);
 
-/** Calls `onChange` whenever the backend stores a clipboard change. */
-export const onHistoryChanged = (onChange: () => void): Promise<UnlistenFn> =>
-  listen('clipboard-captured', onChange);
+/** Saves a `.zip` backup where the user picks; `null` if they cancel. */
+export const exportBackup = () => invoke<ExportStats | null>('export_backup');
+
+/** Merges a `.zip` backup the user picks; `null` if they cancel. */
+export const importBackup = () => invoke<ImportStats | null>('import_backup');
+
+/** Calls `onChange` whenever the history changes: a capture or an import. */
+export const onHistoryChanged = async (onChange: () => void): Promise<UnlistenFn> => {
+  const stops = await Promise.all([
+    listen('clipboard-captured', onChange),
+    listen('history-changed', onChange),
+  ]);
+  return () => stops.forEach(stop => stop());
+};
 
 /** Readable message from a rejected `invoke`. */
 export const errorMessage = (error: unknown): string =>

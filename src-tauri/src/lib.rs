@@ -7,6 +7,7 @@
 //! and notifications; [`autostart`] the start-on-login entry.
 
 pub mod autostart;
+pub mod backup;
 pub mod capture;
 mod commands;
 mod desktop;
@@ -31,6 +32,8 @@ use crate::store::Store;
 
 /// Emitted with a [`CapturedPayload`] after each stored clipboard change.
 pub const CAPTURED_EVENT: &str = "clipboard-captured";
+/// Emitted when the history changed as a whole (e.g. after an import).
+pub const HISTORY_EVENT: &str = "history-changed";
 /// Emitted with the new [`Settings`] whenever they change, including from
 /// the tray menu.
 pub const SETTINGS_EVENT: &str = "settings-changed";
@@ -188,6 +191,7 @@ pub fn run() {
         }))
         .plugin(desktop::shortcut_plugin())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let data_dir = app.path().app_data_dir()?;
             let settings_file = SettingsFile::new(&app.path().app_config_dir()?);
@@ -255,6 +259,8 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::hide_window,
+            commands::export_backup,
+            commands::import_backup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ClipVault");
