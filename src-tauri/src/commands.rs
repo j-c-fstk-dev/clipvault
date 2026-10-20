@@ -8,7 +8,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::backup::{self, ExportStats};
-use crate::model::{Item, ItemKind, SnapshotStatus};
+use crate::locate;
+use crate::model::{image_mime, Category, FileEntry, Item, ItemKind, SnapshotStatus};
+use crate::open::{self as opener, AppChoice};
 use crate::serve::Outgoing;
 use crate::settings::Settings;
 use crate::store::{Counts, ImportStats, Page, Query};
@@ -40,20 +42,67 @@ pub fn get_counts(state: State<'_, AppState>) -> CmdResult<Counts> {
 
 /// Puts an item back on the clipboard and moves it to the top.
 #[tauri::command]
-pub fn copy_item(state: State<'_, AppState>, id: i64) -> CmdResult<Item> {
-    let clipboard = state
-        .clipboard
-        .as_ref()
-        .ok_or("the clipboard is not available")?;
-    let item = state
+pub async fn copy_item(app: AppHandle, id: i64) -> CmdResult<Item> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let clipboard = state
+            .clipboard
+            .as_ref()
+            .ok_or("the clipboard is not available")?;
+        let item = find_moved(&app, load_item(&state, id)?)?;
+        clipboard
+            .set(&outgoing_for(&item)?)
+            .map_err(|e| e.to_string())?;
+        state.store.touch(id).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+fn load_item(state: &AppState, id: i64) -> CmdResult<Item> {
+    state
         .store
         .get(id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("item {id} not found"))?;
-    clipboard
-        .set(&outgoing_for(&item)?)
-        .map_err(|e| e.to_string())?;
-    state.store.touch(id).map_err(|e| e.to_string())
+        .ok_or_else(|| format!("item {id} not found"))
+}
+
+/// Looks for the files of `item` that are gone with no saved copy (moved
+/// after the tracker stopped following them, or while ClipVault was not
+/// running) and records where they are now.
+fn find_moved(app: &AppHandle, item: Item) -> CmdResult<Item> {
+    let state = app.state::<AppState>();
+    let mut relocated = false;
+    for (position, file) in item.files.iter().enumerate() {
+        if file.exists || openable_path(file).is_ok() {
+            continue;
+        }
+        let Some(identity) = state
+            .store
+            .file_identity(item.id, position)
+            .map_err(|e| e.to_string())?
+        else {
+            continue;
+        };
+        let mut roots: Vec<PathBuf> = Path::new(&file.path)
+            .parent()
+            .map(Path::to_path_buf)
+            .into_iter()
+            .collect();
+        roots.extend(locate::default_roots());
+        if let Some(found) = locate::find(&identity, &roots, locate::SEARCH_BUDGET) {
+            log::info!("{} found at {}", file.name, found.display());
+            state
+                .store
+                .relocate_file(item.id, position, &found)
+                .map_err(|e| e.to_string())?;
+            relocated = true;
+        }
+    }
+    if !relocated {
+        return Ok(item);
+    }
+    let _ = app.emit(crate::HISTORY_EVENT, ());
+    load_item(&state, item.id)
 }
 
 /// What to put on the clipboard for `item`. Files come from their original
@@ -90,9 +139,116 @@ fn outgoing_for(item: &Item) -> CmdResult<Outgoing> {
             if paths.is_empty() {
                 return Err("these files no longer exist and no copy was saved".into());
             }
-            Outgoing::Files { paths }
+            let image = match paths.as_slice() {
+                [only] if item.category == Category::Image => image_contents(only),
+                _ => None,
+            };
+            Outgoing::Files { paths, image }
         }
     })
+}
+
+/// Outcome of [`open_file`].
+#[derive(Debug, Clone, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum OpenResult {
+    /// Opened with the application remembered for its type.
+    Opened,
+    /// The user has to pick an application.
+    Choose {
+        name: String,
+        content_type: String,
+        description: String,
+        apps: Vec<AppChoice>,
+    },
+}
+
+/// Opens one of an item's files: with the app remembered via "Always" for its
+/// type, or by returning the apps to choose from.
+#[tauri::command]
+pub async fn open_file(app: AppHandle, id: i64, position: usize) -> CmdResult<OpenResult> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let file = item_file(&find_moved(&app, load_item(&state, id)?)?, position)?;
+        let path = openable_path(&file)?;
+        let content_type = opener::content_type(&path);
+        if let Some(app_id) = state.settings().open_with.get(&content_type) {
+            if opener::app_exists(app_id) {
+                opener::launch(app_id, &path)?;
+                return Ok(OpenResult::Opened);
+            }
+        }
+        Ok(OpenResult::Choose {
+            name: file.name,
+            description: opener::describe(&content_type),
+            apps: opener::apps_for(&content_type),
+            content_type,
+        })
+    })
+    .await
+}
+
+/// Opens one of an item's files with `app_id`; `always` remembers the choice
+/// for files of the same type.
+#[tauri::command]
+pub fn open_file_with(
+    app: AppHandle,
+    id: i64,
+    position: usize,
+    app_id: String,
+    always: bool,
+) -> CmdResult<()> {
+    let state = app.state::<AppState>();
+    let path = openable_path(&item_file(&load_item(&state, id)?, position)?)?;
+    opener::launch(&app_id, &path)?;
+    if always {
+        let mut settings = state.settings();
+        settings
+            .open_with
+            .insert(opener::content_type(&path), app_id);
+        crate::apply_settings(&app, settings)?;
+    }
+    Ok(())
+}
+
+fn item_file(item: &Item, position: usize) -> CmdResult<FileEntry> {
+    item.files
+        .get(position)
+        .cloned()
+        .ok_or_else(|| format!("item {} has no file {position}", item.id))
+}
+
+/// The original file if it is still there, otherwise the vault copy.
+fn openable_path(file: &FileEntry) -> CmdResult<PathBuf> {
+    let original = PathBuf::from(&file.path);
+    if original.exists() {
+        return Ok(original);
+    }
+    file.snapshot_path
+        .as_deref()
+        .filter(|_| file.status == SnapshotStatus::Stored)
+        .map(PathBuf::from)
+        .filter(|p| p.exists())
+        .ok_or_else(|| {
+            format!(
+                "{} is no longer at {} and no copy was saved",
+                file.name, file.path
+            )
+        })
+}
+
+/// Bytes and MIME type of an image file small enough to keep in memory.
+fn image_contents(path: &Path) -> Option<(Vec<u8>, String)> {
+    const MAX_IMAGE_BYTES: u64 = 64 * 1024 * 1024;
+    let mime = image_mime(path)?;
+    if fs::metadata(path).ok()?.len() > MAX_IMAGE_BYTES {
+        return None;
+    }
+    Some((fs::read(path).ok()?, mime.to_string()))
 }
 
 #[tauri::command]
@@ -179,6 +335,7 @@ pub async fn import_backup(app: AppHandle) -> CmdResult<Option<ImportStats>> {
         let max_items = state.settings().max_items;
         let stats = backup::import(&state.store, &path, state.store.data_dir(), max_items)
             .map_err(|e| format!("import failed: {e}"))?;
+        let _ = state.snapshots.send(()); // imported items may still need copies
         let _ = app.emit(crate::HISTORY_EVENT, ());
         Ok(Some(stats))
     })
@@ -204,7 +361,7 @@ pub fn hide_window(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Category, FileEntry};
+    use crate::model::FileEntry;
 
     fn files_item(files: Vec<FileEntry>) -> Item {
         Item {
@@ -233,6 +390,7 @@ mod tests {
             is_dir: false,
             size: None,
             snapshot_path: snapshot.map(|p| p.to_string_lossy().into_owned()),
+            exists: path.exists(),
             status: if snapshot.is_some() {
                 SnapshotStatus::Stored
             } else {
@@ -259,7 +417,8 @@ mod tests {
         assert_eq!(
             outgoing_for(&item).unwrap(),
             Outgoing::Files {
-                paths: vec![original, snapshot]
+                paths: vec![original, snapshot],
+                image: None,
             }
         );
 

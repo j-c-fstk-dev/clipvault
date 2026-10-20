@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Grid3X3, List, Star, Settings, Clipboard, Pause, Play, AlertTriangle } from 'lucide-react';
+import { Search, Grid3X3, List, Star, Settings, Clipboard, Pause, Play, AlertTriangle, ChevronDown } from 'lucide-react';
 import { ViewMode, SortOption, Theme, AccentColor, CaptureStatus } from '../types';
 
 /** Focused when the window is brought up, so typing searches right away. */
@@ -48,7 +48,7 @@ const Header: React.FC<HeaderProps> = ({
   const CaptureIcon = captureUnavailable ? AlertTriangle : captureEnabled ? Pause : Play;
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-lg border-b transition-all duration-300 ${
+    <header className={`fixed top-0 left-0 right-0 z-50 border-b transition-all duration-300 ${
       theme === 'dark' 
         ? 'bg-gray-900/80 border-gray-700' 
         : 'bg-white/80 border-gray-200'
@@ -88,7 +88,7 @@ const Header: React.FC<HeaderProps> = ({
               placeholder="Search clipboard history..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className={`w-full pl-10 pr-4 py-2 rounded-lg border backdrop-blur-sm transition-all duration-300 focus:outline-none focus:ring-2 ${
+              className={`w-full pl-10 pr-4 py-2 rounded-lg border transition-all duration-300 focus:outline-none focus:ring-2 ${
                 theme === 'dark'
                   ? 'bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 focus:border-gray-500'
                   : 'bg-white/50 border-gray-300 text-gray-900 placeholder-gray-500 focus:border-gray-400'
@@ -104,20 +104,30 @@ const Header: React.FC<HeaderProps> = ({
         {/* Controls */}
         <div className="flex items-center space-x-2">
           {/* Sort Dropdown */}
-          <select
-            value={sortBy}
-            onChange={(e) => onSortChange(e.target.value as SortOption)}
-            className={`px-3 py-2 rounded-lg border backdrop-blur-sm transition-all duration-300 focus:outline-none focus:ring-2 ${
-              theme === 'dark'
-                ? 'bg-gray-800/50 border-gray-600 text-white'
-                : 'bg-white/50 border-gray-300 text-gray-900'
-            }`}
-          >
-            <option value="date-desc">Newest First</option>
-            <option value="date-asc">Oldest First</option>
-            <option value="name-asc">Name A-Z</option>
-            <option value="name-desc">Name Z-A</option>
-          </select>
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => onSortChange(e.target.value as SortOption)}
+              aria-label="Sort order"
+              className={`appearance-none pl-3 pr-9 py-2 rounded-lg border text-sm cursor-pointer transition-all duration-300 focus:outline-none focus:ring-2 ${
+                theme === 'dark'
+                  ? 'bg-gray-800 border-gray-600 text-gray-100 hover:bg-gray-700'
+                  : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
+              }`}
+              style={{ '--tw-ring-color': `${accentColor}40` } as React.CSSProperties}
+            >
+              <option value="date-desc">Newest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="name-asc">Name A-Z</option>
+              <option value="name-desc">Name Z-A</option>
+            </select>
+            <ChevronDown
+              aria-hidden
+              className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 ${
+                theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+              }`}
+            />
+          </div>
 
           {/* View Mode Toggle */}
           <div className={`flex rounded-lg border overflow-hidden ${

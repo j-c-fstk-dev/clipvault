@@ -223,6 +223,7 @@ fn serves_copied_items_to_other_apps() {
     clipboard
         .set(&Outgoing::Files {
             paths: vec![PathBuf::from("/home/me/a b.txt")],
+            image: None,
         })
         .unwrap();
     assert_eq!(paste("text/uri-list"), b"file:///home/me/a%20b.txt\r\n");

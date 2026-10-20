@@ -12,6 +12,7 @@ use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::locate::Identity;
 use crate::model::{
     classify_files, classify_text, file_name, image_extension, png_dimensions, Captured, Category,
     FileEntry, Item, ItemKind, SnapshotStatus,
@@ -20,7 +21,7 @@ use crate::settings::Settings;
 
 const DB_FILE: &str = "clipvault.db";
 const BLOBS_DIR: &str = "blobs";
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 const MAX_TAG_LEN: usize = 64;
 
 #[derive(Debug)]
@@ -66,6 +67,8 @@ pub struct Inserted {
     pub is_new: bool,
     /// Items removed to respect `max_items`.
     pub pruned: Vec<i64>,
+    /// Files are waiting to be copied by [`Store::process_snapshots`].
+    pub snapshot_pending: bool,
 }
 
 /// History order, matching `SortOption` in the UI.
@@ -228,6 +231,7 @@ impl Store {
                     item,
                     is_new: false,
                     pruned: Vec::new(),
+                    snapshot_pending: false,
                 });
             }
         }
@@ -271,8 +275,9 @@ impl Store {
             let id = tx.last_insert_rowid();
             for (position, file) in row.files.iter().enumerate() {
                 tx.execute(
-                    "INSERT INTO item_files (item_id, position, path, name, is_dir, size, snapshot, status)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    "INSERT INTO item_files (item_id, position, path, name, is_dir, size, snapshot,
+                                             status, dev, ino)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                     params![
                         id,
                         position as i64,
@@ -282,6 +287,8 @@ impl Store {
                         file.size.map(|s| s as i64),
                         file.snapshot,
                         file.status.as_str(),
+                        file.identity.map(|(dev, _)| dev as i64),
+                        file.identity.map(|(_, ino)| ino as i64),
                     ],
                 )?;
             }
@@ -298,10 +305,15 @@ impl Store {
 
         let pruned = self.prune_locked(&conn, settings.max_items)?;
         let item = self.load(&conn, id)?.ok_or(StoreError::NotFound(id))?;
+        let snapshot_pending = item
+            .files
+            .iter()
+            .any(|f| f.status == SnapshotStatus::Pending);
         Ok(Inserted {
             item,
             is_new: true,
             pruned,
+            snapshot_pending,
         })
     }
 
@@ -344,12 +356,7 @@ impl Store {
                 }
             }
             Captured::Files { paths } => {
-                let files = snapshot_files(
-                    &paths,
-                    blob_dir,
-                    &format!("{BLOBS_DIR}/{hash}"),
-                    settings.snapshot_limit_bytes(),
-                );
+                let files = measure_files(&paths, settings.snapshot_limit_bytes());
                 let size = files.iter().map(|f| f.size).sum::<Option<u64>>();
                 NewRow {
                     kind,
@@ -588,6 +595,129 @@ impl Store {
                 Ok(record)
             })
             .collect()
+    }
+
+    /// Copies every file still waiting for its snapshot. Returns the items
+    /// that changed. Slow (it copies files); run it off the UI and capture
+    /// threads.
+    pub fn process_snapshots(&self) -> Result<Vec<i64>> {
+        let pending: Vec<(i64, String, i64, String, String, bool)> = {
+            let conn = self.conn();
+            let mut stmt = conn.prepare(
+                "SELECT f.item_id, i.hash, f.position, f.path, f.name, f.is_dir
+                 FROM item_files f JOIN items i ON i.id = f.item_id
+                 WHERE f.status = 'pending' ORDER BY f.item_id, f.position",
+            )?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            rows
+        };
+
+        let mut changed = Vec::new();
+        for (item_id, hash, position, path, name, is_dir) in pending {
+            let relative = format!("{BLOBS_DIR}/{hash}/{position}/{name}");
+            let target = self.data_dir.join(&relative);
+            let _ = fs::remove_dir_all(target.parent().unwrap_or(&target));
+            let (status, snapshot) = match copy_snapshot(Path::new(&path), is_dir, &target) {
+                Ok(()) => (SnapshotStatus::Stored, Some(relative)),
+                Err(err) => {
+                    log::warn!("cannot snapshot {path}: {err}");
+                    let _ = fs::remove_dir_all(target.parent().unwrap_or(&target));
+                    (SnapshotStatus::Unavailable, None)
+                }
+            };
+            let conn = self.conn();
+            let updated = conn.execute(
+                "UPDATE item_files SET status = ?1, snapshot = ?2
+                 WHERE item_id = ?3 AND position = ?4 AND status = 'pending'",
+                params![status.as_str(), snapshot, item_id, position],
+            )?;
+            if updated == 0 {
+                // Deleted (or pruned) while copying.
+                let exists: bool = conn
+                    .query_row("SELECT 1 FROM items WHERE hash = ?1", [&hash], |_| Ok(true))
+                    .optional()?
+                    .unwrap_or(false);
+                if !exists {
+                    self.remove_blobs(&hash);
+                }
+            } else if changed.last() != Some(&item_id) {
+                changed.push(item_id);
+            }
+        }
+        Ok(changed)
+    }
+
+    /// Device, inode and details of a file as it was when copied, to find it
+    /// after a move. `None` for imported items or paths that never existed.
+    pub fn file_identity(&self, item_id: i64, position: usize) -> Result<Option<Identity>> {
+        let conn = self.conn();
+        let row = conn
+            .query_row(
+                "SELECT dev, ino, name, is_dir, size FROM item_files
+                 WHERE item_id = ?1 AND position = ?2",
+                params![item_id, position as i64],
+                |r| {
+                    Ok((
+                        r.get::<_, Option<i64>>(0)?,
+                        r.get::<_, Option<i64>>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, bool>(3)?,
+                        r.get::<_, Option<i64>>(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        Ok(match row {
+            Some((Some(dev), Some(ino), name, is_dir, size)) => Some(Identity {
+                dev: dev as u64,
+                ino: ino as u64,
+                name,
+                is_dir,
+                size: size.filter(|_| !is_dir).map(|s| s as u64),
+            }),
+            _ => None,
+        })
+    }
+
+    /// Records that a file now lives at `new_path` (it was moved).
+    pub fn relocate_file(&self, item_id: i64, position: usize, new_path: &Path) -> Result<()> {
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "UPDATE item_files SET path = ?1, name = ?2 WHERE item_id = ?3 AND position = ?4",
+            params![
+                new_path.to_string_lossy(),
+                file_name(new_path),
+                item_id,
+                position as i64
+            ],
+        )?;
+        // The content lists the paths; keep it (and search) current.
+        let paths = {
+            let mut stmt =
+                tx.prepare("SELECT path FROM item_files WHERE item_id = ?1 ORDER BY position")?;
+            let paths = stmt
+                .query_map([item_id], |r| r.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            paths
+        };
+        tx.execute(
+            "UPDATE items SET content = ?1 WHERE id = ?2",
+            params![paths.join("\n"), item_id],
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Where the database and blobs live.
@@ -841,8 +971,10 @@ impl Store {
             .query_map([id], |r| {
                 let snapshot: Option<String> = r.get(4)?;
                 let status: String = r.get(5)?;
+                let path: String = r.get(0)?;
                 Ok(FileEntry {
-                    path: r.get(0)?,
+                    exists: Path::new(&path).exists(),
+                    path,
                     name: r.get(1)?,
                     is_dir: r.get(2)?,
                     size: r.get::<_, Option<i64>>(3)?.map(|s| s as u64),
@@ -905,11 +1037,16 @@ struct FileRow {
     /// Path relative to the data directory.
     snapshot: Option<String>,
     status: SnapshotStatus,
+    /// Device and inode when copied, to find the file after it is moved.
+    identity: Option<(u64, u64)>,
 }
 
-/// Copies `paths` into `dest/<position>/<name>` when their combined size is
-/// within `limit` bytes; otherwise records only their paths.
-fn snapshot_files(paths: &[PathBuf], dest: &Path, dest_rel: &str, limit: u64) -> Vec<FileRow> {
+/// Describes copied paths: sizes, identity, and whether they will be copied
+/// into the vault (`Pending`) — only when their combined size is within
+/// `limit` bytes — or kept as paths only.
+fn measure_files(paths: &[PathBuf], limit: u64) -> Vec<FileRow> {
+    use std::os::unix::fs::MetadataExt;
+
     let mut over_limit = limit == 0;
     let mut remaining = limit;
     let mut rows: Vec<FileRow> = paths
@@ -921,65 +1058,57 @@ fn snapshot_files(paths: &[PathBuf], dest: &Path, dest_rel: &str, limit: u64) ->
                 is_dir: false,
                 size: None,
                 snapshot: None,
-                status: SnapshotStatus::TooLarge,
+                status: SnapshotStatus::Pending,
+                identity: None,
             };
             match fs::metadata(path) {
                 Err(_) => row.status = SnapshotStatus::Unavailable,
-                Ok(meta) if meta.is_dir() => {
-                    row.is_dir = true;
-                    if !over_limit {
-                        match dir_size(path, remaining) {
-                            Some(size) => {
-                                remaining -= size;
-                                row.size = Some(size);
-                            }
-                            None => over_limit = true,
-                        }
-                    }
-                }
                 Ok(meta) => {
-                    row.size = Some(meta.len());
-                    if meta.len() > remaining {
-                        over_limit = true;
+                    row.identity = Some((meta.dev(), meta.ino()));
+                    if meta.is_dir() {
+                        row.is_dir = true;
+                        if !over_limit {
+                            match dir_size(path, remaining) {
+                                Some(size) => {
+                                    remaining -= size;
+                                    row.size = Some(size);
+                                }
+                                None => over_limit = true,
+                            }
+                        }
                     } else {
-                        remaining -= meta.len();
+                        row.size = Some(meta.len());
+                        if meta.len() > remaining {
+                            over_limit = true;
+                        } else {
+                            remaining -= meta.len();
+                        }
                     }
                 }
             }
             row
         })
         .collect();
-
     if over_limit {
-        return rows;
-    }
-
-    for (position, row) in rows.iter_mut().enumerate() {
-        if row.status == SnapshotStatus::Unavailable {
-            continue;
-        }
-        let target_dir = dest.join(position.to_string());
-        let target = target_dir.join(&row.name);
-        let copied = fs::create_dir_all(&target_dir).and_then(|_| {
-            if row.is_dir {
-                copy_dir(Path::new(&row.path), &target)
-            } else {
-                fs::copy(&row.path, &target).map(|_| ())
-            }
-        });
-        match copied {
-            Ok(()) => {
-                row.status = SnapshotStatus::Stored;
-                row.snapshot = Some(format!("{dest_rel}/{position}/{}", row.name));
-            }
-            Err(err) => {
-                log::warn!("cannot snapshot {}: {err}", row.path);
-                row.status = SnapshotStatus::Unavailable;
-                let _ = fs::remove_dir_all(&target_dir);
+        for row in &mut rows {
+            if row.status == SnapshotStatus::Pending {
+                row.status = SnapshotStatus::TooLarge;
             }
         }
     }
     rows
+}
+
+/// Copies a file or folder to `target` (whose parent is created first).
+fn copy_snapshot(source: &Path, is_dir: bool, target: &Path) -> io::Result<()> {
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    if is_dir {
+        copy_dir(source, target)
+    } else {
+        fs::copy(source, target).map(|_| ())
+    }
 }
 
 /// Total size of regular files under `dir`, or `None` once it exceeds
@@ -1060,6 +1189,28 @@ fn migrate(conn: &Connection) -> Result<()> {
              );
              COMMIT;",
         )?;
+    }
+    if version < 2 {
+        // v2: file identity (device + inode) to find moved files, and image
+        // files copied in a file manager count as images.
+        let image_names = crate::model::IMAGE_EXTENSIONS
+            .iter()
+            .map(|(ext, _)| format!("lower(f.name) LIKE '%.{ext}'"))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        conn.execute_batch(&format!(
+            "BEGIN;
+             ALTER TABLE item_files ADD COLUMN dev INTEGER;
+             ALTER TABLE item_files ADD COLUMN ino INTEGER;
+             UPDATE items SET category = 'image'
+             WHERE kind = 'files'
+               AND EXISTS (SELECT 1 FROM item_files f WHERE f.item_id = items.id)
+               AND NOT EXISTS (
+                   SELECT 1 FROM item_files f
+                   WHERE f.item_id = items.id AND (f.is_dir = 1 OR NOT ({image_names}))
+               );
+             COMMIT;"
+        ))?;
     }
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
@@ -1229,15 +1380,31 @@ mod tests {
         fs::write(folder.join("sub/a.txt"), "abc").unwrap();
         let missing = src.path().join("gone.txt");
 
-        let item = store
+        let inserted = store
             .insert(
                 Captured::Files {
                     paths: vec![file.clone(), folder.clone(), missing],
                 },
                 &Settings::default(),
             )
-            .unwrap()
-            .item;
+            .unwrap();
+        // Stored right away; the copies are made afterwards.
+        assert!(inserted.snapshot_pending);
+        let statuses: Vec<_> = inserted.item.files.iter().map(|f| f.status).collect();
+        assert_eq!(
+            statuses,
+            vec![
+                SnapshotStatus::Pending,
+                SnapshotStatus::Pending,
+                SnapshotStatus::Unavailable
+            ]
+        );
+        assert_eq!(store.process_snapshots().unwrap(), vec![inserted.item.id]);
+        assert!(
+            store.process_snapshots().unwrap().is_empty(),
+            "nothing left"
+        );
+        let item = store.get(inserted.item.id).unwrap().unwrap();
 
         assert_eq!(item.category, Category::File);
         assert_eq!(item.files.len(), 3);
@@ -1257,6 +1424,22 @@ mod tests {
         assert_eq!(fs::read_to_string(copied).unwrap(), "abc");
         assert_eq!(m.status, SnapshotStatus::Unavailable);
         assert_eq!(item.size, None); // unknown because one entry is missing
+    }
+
+    #[test]
+    fn snapshot_of_deleted_item_is_discarded() {
+        let (dir, store) = open();
+        let src = tempfile::tempdir().unwrap();
+        let file = src.path().join("a.txt");
+        fs::write(&file, "a").unwrap();
+        let item = store
+            .insert(Captured::Files { paths: vec![file] }, &Settings::default())
+            .unwrap()
+            .item;
+        store.delete(item.id).unwrap();
+        assert!(store.process_snapshots().unwrap().is_empty());
+        let blobs = fs::read_dir(dir.path().join(BLOBS_DIR)).unwrap().count();
+        assert_eq!(blobs, 0, "no orphan copies");
     }
 
     #[test]
@@ -1485,6 +1668,7 @@ mod tests {
             &s,
         )
         .unwrap();
+        src.process_snapshots().unwrap();
         let records = src.records().unwrap();
         let hash = records[0].hash.clone();
 
@@ -1577,6 +1761,81 @@ mod tests {
             .pragma_query_value(None, "synchronous", |r| r.get(0))
             .unwrap();
         assert_eq!((mode.as_str(), synchronous), ("wal", 1)); // 1 = NORMAL
+    }
+
+    #[test]
+    fn migration_v2_reclassifies_image_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = tempfile::tempdir().unwrap();
+        let shot = src.path().join("screenshot.PNG");
+        let doc = src.path().join("notes.txt");
+        fs::write(&shot, "png").unwrap();
+        fs::write(&doc, "txt").unwrap();
+        {
+            let store = Store::open(dir.path()).unwrap();
+            let s = Settings::default();
+            store
+                .insert(Captured::Files { paths: vec![shot] }, &s)
+                .unwrap();
+            store
+                .insert(Captured::Files { paths: vec![doc] }, &s)
+                .unwrap();
+            // Rewind to a v0.1.0 database: no identity columns, images as files.
+            let conn = store.conn();
+            conn.execute_batch(
+                "UPDATE items SET category = 'file';
+                 ALTER TABLE item_files DROP COLUMN dev;
+                 ALTER TABLE item_files DROP COLUMN ino;
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let store = Store::open(dir.path()).unwrap();
+        let categories: Vec<_> = store
+            .list(10, 0)
+            .unwrap()
+            .into_iter()
+            .map(|i| (i.files[0].name.clone(), i.category))
+            .collect();
+        assert_eq!(
+            categories,
+            vec![
+                ("notes.txt".to_string(), Category::File),
+                ("screenshot.PNG".to_string(), Category::Image)
+            ]
+        );
+    }
+
+    #[test]
+    fn remembers_identity_and_relocates_files() {
+        let (_dir, store) = open();
+        let src = tempfile::tempdir().unwrap();
+        let file = src.path().join("a.txt");
+        fs::write(&file, "abc").unwrap();
+        let item = store
+            .insert(
+                Captured::Files {
+                    paths: vec![file.clone()],
+                },
+                &Settings::default(),
+            )
+            .unwrap()
+            .item;
+        assert!(item.files[0].exists);
+
+        let identity = store.file_identity(item.id, 0).unwrap().unwrap();
+        assert_eq!(identity, crate::locate::identify(&file).unwrap());
+
+        let moved = src.path().join("b.txt");
+        fs::rename(&file, &moved).unwrap();
+        assert!(!store.get(item.id).unwrap().unwrap().files[0].exists);
+
+        store.relocate_file(item.id, 0, &moved).unwrap();
+        let item = store.get(item.id).unwrap().unwrap();
+        assert_eq!(item.files[0].path, moved.to_string_lossy());
+        assert_eq!(item.files[0].name, "b.txt");
+        assert!(item.files[0].exists);
+        assert_eq!(item.content, moved.to_string_lossy());
     }
 
     #[test]

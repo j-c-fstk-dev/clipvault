@@ -320,6 +320,7 @@ mod tests {
             .unwrap()
             .item;
         src.add_tag(folder.id, "code").unwrap();
+        src.process_snapshots().unwrap();
 
         let out = tempfile::tempdir().unwrap();
         let zip_path = out.path().join("backup.zip");

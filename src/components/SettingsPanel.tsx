@@ -212,11 +212,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   saveError
 }) => {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className={`max-w-2xl w-full max-h-[90vh] rounded-2xl backdrop-blur-lg border overflow-hidden ${
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`max-w-2xl w-full max-h-[90vh] rounded-2xl border overflow-hidden ${
         theme === 'dark' 
-          ? 'bg-gray-900/90 border-gray-700' 
-          : 'bg-white/90 border-gray-300'
+          ? 'bg-gray-900 border-gray-700' 
+          : 'bg-white border-gray-300'
       }`}>
         {/* Header */}
         <div className={`flex items-center justify-between p-6 border-b ${
@@ -486,6 +486,61 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     style={{ backgroundColor: settings.minimizeToTray ? accentColor : undefined }}
                   />
                 </label>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className={`block text-sm font-medium ${
+                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                    Hardware acceleration
+                  </label>
+                  <p className={`text-xs ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    Turn off if text or images look garbled or noisy (old integrated graphics). Applies after restarting ClipVault
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.hardwareAcceleration}
+                    onChange={(e) => onUpdateSettings({ hardwareAcceleration: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div 
+                    className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600"
+                    style={{ backgroundColor: settings.hardwareAcceleration ? accentColor : undefined }}
+                  />
+                </label>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <label className={`block text-sm font-medium ${
+                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                    Apps chosen with "Always"
+                  </label>
+                  <p className={`text-xs ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    {Object.keys(settings.openWith).length === 0
+                      ? 'None yet. Opening a file lets you pick an app just once or always.'
+                      : `${Object.keys(settings.openWith).length} file type(s) open straight away: ${Object.keys(settings.openWith).join(', ')}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onUpdateSettings({ openWith: {} })}
+                  disabled={Object.keys(settings.openWith).length === 0}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-sm border disabled:opacity-40 ${
+                    theme === 'dark'
+                      ? 'border-gray-600 text-gray-200 hover:bg-gray-800'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Reset
+                </button>
               </div>
             </div>
           </section>

@@ -10,6 +10,8 @@ interface ClipboardItemListProps {
   onRemoveTag: (id: string, tag: string) => void;
   onDeleteItem: (id: string) => void;
   onCopy: () => void;
+  /** Opens one of a file item's files. */
+  onOpenFile: (position: number) => void;
   onView: () => void;
   /** Highlighted for keyboard actions. */
   isSelected?: boolean;
@@ -24,6 +26,7 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
   onRemoveTag,
   onDeleteItem,
   onCopy,
+  onOpenFile,
   onView,
   isSelected = false,
   theme,
@@ -67,7 +70,7 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
   };
 
   return (
-    <div className={`group flex items-center space-x-4 p-4 rounded-xl backdrop-blur-sm border transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
+    <div className={`group flex items-center space-x-4 p-4 rounded-xl border transition-all duration-300 hover:scale-[1.02] hover:shadow-lg ${
       theme === 'dark' 
         ? 'bg-gray-800/30 border-gray-600 hover:bg-gray-800/50' 
         : 'bg-white/30 border-gray-300 hover:bg-white/50'
@@ -119,7 +122,7 @@ const ClipboardItemList: React.FC<ClipboardItemListProps> = ({
 
         {item.files.length > 0 ? (
           <div className="mb-2">
-            <FileSummary files={item.files} theme={theme} accentColor={accentColor} limit={3} />
+            <FileSummary files={item.files} theme={theme} accentColor={accentColor} onOpen={onOpenFile} limit={3} />
           </div>
         ) : (
           <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] mb-2 ${

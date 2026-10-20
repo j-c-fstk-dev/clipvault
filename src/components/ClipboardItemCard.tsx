@@ -10,6 +10,8 @@ interface ClipboardItemCardProps {
   onRemoveTag: (id: string, tag: string) => void;
   onDeleteItem: (id: string) => void;
   onCopy: () => void;
+  /** Opens one of a file item's files. */
+  onOpenFile: (position: number) => void;
   onView: () => void;
   /** Highlighted for keyboard actions. */
   isSelected?: boolean;
@@ -24,6 +26,7 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
   onRemoveTag,
   onDeleteItem,
   onCopy,
+  onOpenFile,
   onView,
   isSelected = false,
   theme,
@@ -67,7 +70,7 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
   };
 
   return (
-    <div className={`group relative rounded-xl backdrop-blur-sm border transition-all duration-300 hover:scale-105 hover:shadow-xl ${
+    <div className={`group relative rounded-xl border transition-all duration-300 hover:scale-105 hover:shadow-xl ${
       theme === 'dark' 
         ? 'bg-gray-800/30 border-gray-600 hover:bg-gray-800/50' 
         : 'bg-white/30 border-gray-300 hover:bg-white/50'
@@ -167,7 +170,7 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
         ) : null}
 
         {item.files.length > 0 ? (
-          <FileSummary files={item.files} theme={theme} accentColor={accentColor} limit={3} />
+          <FileSummary files={item.files} theme={theme} accentColor={accentColor} onOpen={onOpenFile} limit={3} />
         ) : (
           <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] ${
             theme === 'dark' ? 'text-gray-300' : 'text-gray-700'

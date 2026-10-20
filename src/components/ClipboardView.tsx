@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ClipboardItem, ViewMode, Theme, AccentColor, Settings } from '../types';
-import { errorMessage, hasBackend, hideWindow } from '../lib/backend';
+import { errorMessage, hasBackend, hideWindow, openFile, openFileWith } from '../lib/backend';
 import { matchesAccelerator } from '../lib/shortcuts';
 import { SEARCH_INPUT_ID } from './Header';
 import ClipboardItemCard from './ClipboardItemCard';
 import ClipboardItemList from './ClipboardItemList';
 import ItemModal from './ItemModal';
+import OpenWithDialog from './OpenWithDialog';
+import { OpenResult } from '../types';
 
 const TOAST_MS = 2500;
 
@@ -54,6 +56,12 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
   const [cursor, setCursor] = useState(0);
+  // A file waiting for the user to pick an application.
+  const [chooser, setChooser] = useState<{
+    itemId: string;
+    position: number;
+    choices: Extract<OpenResult, { kind: 'choose' }>;
+  } | null>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   const selectedItem = items.find(item => item.id === selectedId) ?? null;
   const cursorIndex = Math.min(cursor, items.length - 1);
@@ -96,10 +104,29 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
     );
   };
 
+  const handleOpenFile = (itemId: string, position: number) => {
+    openFile(itemId, position).then(
+      result => {
+        if (result.kind === 'choose') setChooser({ itemId, position, choices: result });
+      },
+      error => setToast({ message: `Could not open: ${errorMessage(error)}`, error: true })
+    );
+  };
+
+  const handleOpenWith = (appId: string, always: boolean) => {
+    if (!chooser) return;
+    const { itemId, position } = chooser;
+    setChooser(null);
+    openFileWith(itemId, position, appId, always).then(
+      () => always && setToast({ message: 'Will always open files of this type with this app', error: false }),
+      error => setToast({ message: `Could not open: ${errorMessage(error)}`, error: true })
+    );
+  };
+
   // Arrow keys move the selection; Enter opens it; the configured shortcuts
   // copy or delete it; Escape closes the preview or hides the window.
   useEffect(() => {
-    if (!keyboardEnabled) return;
+    if (!keyboardEnabled || chooser) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (selectedId) {
         if (e.key === 'Escape') {
@@ -199,6 +226,7 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
               onDeleteItem={onDeleteItem}
               onCopy={() => handleCopy(item.id)}
               onView={() => setSelectedId(item.id)}
+              onOpenFile={position => handleOpenFile(item.id, position)}
               isSelected={item.id === cursorItem?.id}
               theme={theme}
               accentColor={accentColor}
@@ -217,6 +245,7 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
               onDeleteItem={onDeleteItem}
               onCopy={() => handleCopy(item.id)}
               onView={() => setSelectedId(item.id)}
+              onOpenFile={position => handleOpenFile(item.id, position)}
               isSelected={item.id === cursorItem?.id}
               theme={theme}
               accentColor={accentColor}
@@ -236,6 +265,19 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
           onRemoveTag={onRemoveTag}
           onDeleteItem={onDeleteItem}
           onCopy={() => handleCopy(selectedItem.id)}
+          onOpenFile={position => handleOpenFile(selectedItem.id, position)}
+          theme={theme}
+          accentColor={accentColor}
+        />
+      )}
+
+      {chooser && (
+        <OpenWithDialog
+          name={chooser.choices.name}
+          description={chooser.choices.description}
+          apps={chooser.choices.apps}
+          onOpen={handleOpenWith}
+          onClose={() => setChooser(null)}
           theme={theme}
           accentColor={accentColor}
         />

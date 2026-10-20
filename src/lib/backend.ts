@@ -7,6 +7,7 @@ import {
   ClipboardItem,
   ExportStats,
   ImportStats,
+  OpenResult,
   Settings,
   SortOption,
 } from '../types';
@@ -29,7 +30,8 @@ interface BackendItem {
     isDir: boolean;
     size: number | null;
     snapshotPath: string | null;
-    status: 'stored' | 'too_large' | 'unavailable';
+    status: 'pending' | 'stored' | 'too_large' | 'unavailable';
+    exists: boolean;
   }[];
   isFavorite: boolean;
   tags: string[];
@@ -50,6 +52,13 @@ export interface ItemQuery {
 /** True when running inside the desktop app rather than a plain browser. */
 export const hasBackend = isTauri();
 
+/** Image shown for an item: its stored image, or the saved copy of an image file. */
+const previewPath = (item: BackendItem): string | null => {
+  if (item.imagePath) return item.imagePath;
+  const [first] = item.files;
+  return item.category === 'image' && first?.status === 'stored' ? first.snapshotPath : null;
+};
+
 const toClipboardItem = (item: BackendItem): ClipboardItem => ({
   id: String(item.id),
   kind: item.kind,
@@ -58,7 +67,7 @@ const toClipboardItem = (item: BackendItem): ClipboardItem => ({
   timestamp: new Date(item.lastUsedAt).toISOString(),
   size: item.size ?? undefined,
   filename: item.files.length ? item.files.map(f => f.name).join(', ') : undefined,
-  thumbnailUrl: item.imagePath ? convertFileSrc(item.imagePath) : undefined,
+  thumbnailUrl: previewPath(item) ? convertFileSrc(previewPath(item)!) : undefined,
   width: item.width ?? undefined,
   height: item.height ?? undefined,
   files: item.files.map(f => ({
@@ -67,6 +76,7 @@ const toClipboardItem = (item: BackendItem): ClipboardItem => ({
     isDir: f.isDir,
     size: f.size ?? undefined,
     status: f.status,
+    exists: f.exists,
   })),
   isFavorite: item.isFavorite,
   tags: item.tags,
@@ -100,6 +110,14 @@ export const getSettings = () => invoke<Settings>('get_settings');
 
 export const updateSettings = (settings: Settings) =>
   invoke<Settings>('update_settings', { settings });
+
+/** Opens one of an item's files, or returns the apps to choose from. */
+export const openFile = (id: string, position: number) =>
+  invoke<OpenResult>('open_file', { id: Number(id), position });
+
+/** Opens one of an item's files with `appId`; `always` remembers it for the type. */
+export const openFileWith = (id: string, position: number, appId: string, always: boolean) =>
+  invoke('open_file_with', { id: Number(id), position, appId, always });
 
 /** Sends the window to the tray. */
 export const hideWindow = () => invoke('hide_window');

@@ -6,6 +6,36 @@ All notable changes to ClipVault are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
+### Added
+
+- Clicking a copied file opens it: an "Open with" chooser lists the system
+  default first, then the other installed apps; pick "Just once" or
+  "Always" (remembered by ClipVault only, resettable in Settings)
+- Cut and moved files are followed: for 30 minutes after a copy, ClipVault
+  notices when a file leaves its folder and finds where it went (renamed,
+  pasted elsewhere, sent to the trash or to a drive). Files moved later are
+  looked up when they are opened or copied again
+- Badges show whether a file is still in place, only in the saved copy, or
+  not found
+- "Hardware acceleration" setting: turn it off if text looks noisy or
+  flickers on older integrated graphics (applies after a restart)
+
+### Changed
+
+- Copied files are saved in the background at low disk priority after the
+  copy is recorded, so large files and folders no longer compete with the
+  system's own copy; files over the limit keep only their path
+- Image files copied in the file manager (PNG, JPG, …) are listed as
+  images, with a thumbnail, and paste as images in apps that accept them
+
+### Fixed
+
+- The sort menu was white and unreadable in the dark theme
+- Text in the item window rendered with noise on some GPUs (blur effects
+  removed from content)
+
 ## [0.1.0] - 2026-10-20
 
 First release of the Rust rewrite.
@@ -37,5 +67,6 @@ Runs on X11 desktops (XFCE, MATE, Cinnamon, KDE on X11…).
 - Content marked secret by password managers is never stored; capture can
   be paused
 
-[Unreleased]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/j-c-fstk-dev/clipvault/releases/tag/v0.1.0
