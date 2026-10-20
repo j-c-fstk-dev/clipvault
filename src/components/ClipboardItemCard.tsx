@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Star, Tag, Trash2, Copy, Eye, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardItem, Theme, AccentColor } from '../types';
+import FileSummary from './FileSummary';
 
 interface ClipboardItemCardProps {
   item: ClipboardItem;
@@ -10,6 +11,8 @@ interface ClipboardItemCardProps {
   onDeleteItem: (id: string) => void;
   onCopy: () => void;
   onView: () => void;
+  /** Highlighted for keyboard actions. */
+  isSelected?: boolean;
   theme: Theme;
   accentColor: AccentColor;
 }
@@ -22,6 +25,7 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
   onDeleteItem,
   onCopy,
   onView,
+  isSelected = false,
   theme,
   accentColor
 }) => {
@@ -68,9 +72,13 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
         ? 'bg-gray-800/30 border-gray-600 hover:bg-gray-800/50' 
         : 'bg-white/30 border-gray-300 hover:bg-white/50'
     }`}
-    style={{ 
-      boxShadow: `0 4px 20px ${accentColor}10`,
-      borderColor: item.isFavorite ? accentColor : undefined
+    data-item-id={item.id}
+    aria-selected={isSelected}
+    style={{
+      boxShadow: isSelected
+        ? `0 0 0 2px ${accentColor}, 0 4px 20px ${accentColor}30`
+        : `0 4px 20px ${accentColor}10`,
+      borderColor: item.isFavorite || isSelected ? accentColor : undefined
     }}>
       {/* Header */}
       <div className="p-4 border-b border-gray-200/20">
@@ -158,11 +166,15 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
           </div>
         ) : null}
 
-        <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] ${
-          theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
-        }`}>
-          {formatContent(item.content)}
-        </p>
+        {item.files.length > 0 ? (
+          <FileSummary files={item.files} theme={theme} accentColor={accentColor} limit={3} />
+        ) : (
+          <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] ${
+            theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+          }`}>
+            {formatContent(item.content)}
+          </p>
+        )}
 
         {/* Tags */}
         <div className="mt-3 flex flex-wrap gap-1">

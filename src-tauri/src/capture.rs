@@ -3,6 +3,7 @@
 //! Listens for XFixes selection-owner changes on `CLIPBOARD` (no polling),
 //! asks the owner for its `TARGETS`, picks the richest format we understand
 //! and reads it, including the INCR protocol used for large transfers.
+//! The same connection serves our own clipboard offers (see [`crate::serve`]).
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -21,9 +22,10 @@ use x11rb::rust_connection::RustConnection;
 use x11rb::{CURRENT_TIME, NONE};
 
 use crate::model::{decode_html, decode_latin1, parse_uri_list, Captured};
+use crate::serve::{ClipboardHandle, Server};
 
-type BoxError = Box<dyn Error + Send + Sync>;
-type Result<T> = std::result::Result<T, BoxError>;
+pub(crate) type BoxError = Box<dyn Error + Send + Sync>;
+pub(crate) type Result<T> = std::result::Result<T, BoxError>;
 
 /// How long the selection owner gets to answer each request or INCR chunk.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(3);
@@ -36,7 +38,7 @@ const PROPERTY_CHUNK: u32 = 1024 * 1024;
 
 /// Clipboard formats ClipVault understands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Target {
+pub(crate) enum Target {
     /// Set by KeePassXC and other password managers on secrets.
     PasswordHint,
     UriList,
@@ -72,7 +74,14 @@ const TARGET_NAMES: &[(Target, &str)] = &[
 ];
 
 impl Target {
-    fn mime(self) -> &'static str {
+    pub(crate) fn from_mime(mime: &str) -> Option<Self> {
+        TARGET_NAMES
+            .iter()
+            .find(|(_, name)| *name == mime)
+            .map(|(t, _)| *t)
+    }
+
+    pub(crate) fn mime(self) -> &'static str {
         TARGET_NAMES
             .iter()
             .find(|(t, _)| *t == self)
@@ -117,10 +126,10 @@ fn text_targets(offered: &[Target]) -> Vec<Target> {
     .collect()
 }
 
-struct Atoms {
-    clipboard: Atom,
-    targets: Atom,
-    incr: Atom,
+pub(crate) struct Atoms {
+    pub(crate) clipboard: Atom,
+    pub(crate) targets: Atom,
+    pub(crate) incr: Atom,
     /// Property on our window that owners write the data into.
     transfer: Atom,
     by_atom: HashMap<Atom, Target>,
@@ -148,13 +157,19 @@ impl Atoms {
             by_target,
         })
     }
+
+    pub(crate) fn atom(&self, target: Target) -> Atom {
+        self.by_target[&target]
+    }
 }
 
 /// An X11 connection with a hidden window subscribed to clipboard changes.
 pub struct Watcher {
-    conn: RustConnection,
+    conn: Arc<RustConnection>,
     window: Window,
-    atoms: Atoms,
+    atoms: Arc<Atoms>,
+    /// Answers paste requests while we own the clipboard.
+    server: Server,
     /// The clipboard changed while we were busy reading it.
     pending: bool,
 }
@@ -186,12 +201,24 @@ impl Watcher {
             SelectionEventMask::SET_SELECTION_OWNER,
         )?;
         conn.flush()?;
+        let server = Server::new(&conn);
         Ok(Self {
-            conn,
+            conn: Arc::new(conn),
             window,
-            atoms,
+            atoms: Arc::new(atoms),
+            server,
             pending: false,
         })
+    }
+
+    /// A handle other threads use to put content on the clipboard.
+    pub fn handle(&self) -> ClipboardHandle {
+        ClipboardHandle::new(
+            self.conn.clone(),
+            self.window,
+            self.atoms.clone(),
+            self.server.offer(),
+        )
     }
 
     /// Runs the watcher on its own thread, calling `on_capture` for every
@@ -222,7 +249,7 @@ impl Watcher {
             }
             match self.conn.wait_for_event() {
                 Ok(event) => {
-                    self.note_selection_change(&event);
+                    self.handle_event(&event);
                 }
                 Err(err) => {
                     log::error!("X11 connection lost, clipboard capture stopped: {err}");
@@ -232,8 +259,9 @@ impl Watcher {
         }
     }
 
-    /// Returns true if the event was a clipboard owner change.
-    fn note_selection_change(&mut self, event: &Event) -> bool {
+    /// Handles clipboard owner changes and requests for our own offer.
+    /// Returns true if the event was consumed.
+    fn handle_event(&mut self, event: &Event) -> bool {
         match event {
             Event::XfixesSelectionNotify(ev) if ev.selection == self.atoms.clipboard => {
                 if ev.subtype == xfixes::SelectionEvent::SET_SELECTION_OWNER {
@@ -241,7 +269,9 @@ impl Watcher {
                 }
                 true
             }
-            _ => false,
+            _ => self
+                .server
+                .handle_event(&self.conn, &self.atoms, self.window, event),
         }
     }
 
@@ -335,7 +365,7 @@ impl Watcher {
     }
 
     fn read_target(&mut self, target: Target) -> Result<Option<Vec<u8>>> {
-        let atom = self.atoms.by_target[&target];
+        let atom = self.atoms.atom(target);
         self.read_atom(atom)
     }
 
@@ -435,7 +465,7 @@ impl Watcher {
         let deadline = Instant::now() + REPLY_TIMEOUT;
         loop {
             while let Some(event) = self.conn.poll_for_event()? {
-                if self.note_selection_change(&event) {
+                if self.handle_event(&event) {
                     continue;
                 }
                 if let Some(value) = matches(&event) {

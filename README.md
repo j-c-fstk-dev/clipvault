@@ -17,9 +17,9 @@
 
 ---
 
-> **Status:** early development. Clipboard capture and persistent history
-> work; copying items back, tray and backups are next (see
-> [Roadmap](#-roadmap)).
+> **Status:** early development. Capture, history, search, copying back,
+> tray, global shortcut, autostart and backups work; release packages are
+> next (see [Roadmap](#-roadmap)).
 
 ## ✨ Features
 
@@ -30,18 +30,41 @@
 - **Persistent history** in SQLite; copying something again moves it to the
   top instead of duplicating it; oldest items are pruned past the limit
   (favorites are always kept)
+- **Copy anything back** — text (with formatting), images, and files you can
+  paste straight into your file manager; if the original file was moved or
+  deleted, the saved copy is pasted instead
 - **Privacy** — content marked secret by password managers (e.g. KeePassXC)
   is never stored, and capture can be paused
+- **Always at hand** — lives in the tray; `Ctrl+Shift+V` (configurable)
+  brings it up from anywhere, arrow keys pick an item and `Ctrl+C` copies it
+  and gets out of the way so you can paste
+- **Starts with your session** (optional), hidden in the tray; optional
+  desktop notifications for new items
+- **Backups** — export the whole history (images and saved file copies
+  included) to a `.zip` and import it on another machine; importing merges,
+  it never replaces
 - **Category tabs** — text, links, images, files and folders, plus an "All" view
-- **Grid and list views**, sorting by date or name, instant search
+- **Grid and list views**, sorting by date or name, instant search over
+  content, file paths and tags, smooth scrolling through large histories
 - **Favorites and custom tags** to organize what matters
 - **Light and dark themes** with 12 accent colors
 - **Full-screen preview** with metadata and quick actions
 - **Native and lightweight** — Rust backend with the system WebKitGTK, ~2 MB `.deb`
 
-Planned for the first release: copying any item back (images and files
-included), tray icon, global shortcut, autostart and `.zip` export/import
-for backups.
+Planned for the first release: packages on the Releases page.
+
+### Keyboard
+
+| Keys | Action |
+|---|---|
+| `Ctrl+Shift+V` | Show / hide ClipVault from anywhere |
+| `↑` `↓` `←` `→` | Select an item |
+| `Enter` | Open the selected item |
+| `Ctrl+C` | Copy the selected item and hide ClipVault |
+| `Delete` | Delete the selected item |
+| `Esc` | Close the preview, or hide ClipVault |
+
+The show/hide, copy and delete shortcuts can be changed in Settings.
 
 ### Where data lives
 
@@ -96,8 +119,8 @@ npm run lint && npm run build
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-The clipboard capture integration test needs an X server and `xclip`; it is
-skipped without them. To run it headless:
+The clipboard integration tests (capture and paste) need an X server and
+`xclip`; they are skipped without them. To run them headless:
 `sudo apt install xvfb xclip && xvfb-run -a cargo test`.
 
 Set `RUST_LOG=clipvault_lib=debug` for verbose backend logs.
@@ -114,12 +137,16 @@ clipvault/
 ├── src-tauri/               # Rust backend (Tauri 2)
 │   ├── src/
 │   │   ├── capture.rs       # X11 clipboard watcher (XFixes, INCR)
+│   │   ├── serve.rs         # Copying items back (selection owner, INCR)
+│   │   ├── desktop.rs       # Tray, global shortcut, notifications
+│   │   ├── autostart.rs     # ~/.config/autostart entry
+│   │   ├── backup.rs        # .zip export / import
 │   │   ├── store.rs         # SQLite history, images, file snapshots
 │   │   ├── model.rs         # Item types and parsing helpers
 │   │   ├── settings.rs      # settings.json
 │   │   ├── commands.rs      # Commands called by the UI
 │   │   └── lib.rs           # App setup
-│   ├── tests/               # X11 capture integration test
+│   ├── tests/               # X11 capture / paste integration tests
 │   ├── capabilities/        # Window permissions
 │   ├── icons/               # App icons
 │   └── tauri.conf.json      # App and bundle config
@@ -136,9 +163,9 @@ clipvault/
 
 - [x] **Stage 1 — Foundation:** Tauri 2 app, AGPL-3.0, CI
 - [x] **Stage 2 — Core:** X11 clipboard watcher (text, HTML, images, files), dedup, SQLite history, file snapshots, password-manager filtering
-- [ ] **Stage 3 — UI wiring:** real data instead of mocks, copy back any format, persistent settings
-- [ ] **Stage 4 — System:** tray, global shortcut, autostart, notifications
-- [ ] **Stage 5 — Backup:** `.zip` export / import with merge
+- [x] **Stage 3 — UI wiring:** real data instead of mocks, copy back any format, persistent settings
+- [x] **Stage 4 — System:** tray, global shortcut, autostart, notifications
+- [x] **Stage 5 — Backup:** `.zip` export / import with merge
 - [ ] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
 

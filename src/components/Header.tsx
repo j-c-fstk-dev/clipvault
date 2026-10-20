@@ -1,6 +1,9 @@
 import React from 'react';
-import { Search, Grid3X3, List, Star, Settings, Clipboard } from 'lucide-react';
-import { ViewMode, SortOption, Theme, AccentColor } from '../types';
+import { Search, Grid3X3, List, Star, Settings, Clipboard, Pause, Play, AlertTriangle } from 'lucide-react';
+import { ViewMode, SortOption, Theme, AccentColor, CaptureStatus } from '../types';
+
+/** Focused when the window is brought up, so typing searches right away. */
+export const SEARCH_INPUT_ID = 'clipvault-search';
 
 interface HeaderProps {
   searchQuery: string;
@@ -12,6 +15,10 @@ interface HeaderProps {
   showFavoritesOnly: boolean;
   onShowFavoritesChange: (show: boolean) => void;
   onSettingsClick: () => void;
+  captureEnabled: boolean;
+  /** `null` until known, or when running outside the desktop app. */
+  captureStatus: CaptureStatus | null;
+  onToggleCapture: () => void;
   theme: Theme;
   accentColor: AccentColor;
 }
@@ -26,9 +33,20 @@ const Header: React.FC<HeaderProps> = ({
   showFavoritesOnly,
   onShowFavoritesChange,
   onSettingsClick,
+  captureEnabled,
+  captureStatus,
+  onToggleCapture,
   theme,
   accentColor
 }) => {
+  const captureUnavailable = captureStatus !== null && !captureStatus.available;
+  const captureTitle = captureUnavailable
+    ? `Clipboard capture unavailable: ${captureStatus.error ?? 'unknown error'}`
+    : captureEnabled
+      ? `Recording clipboard${captureStatus?.wayland ? ' (Wayland: only X11 apps are captured)' : ''} — click to pause`
+      : 'Capture paused — click to resume';
+  const CaptureIcon = captureUnavailable ? AlertTriangle : captureEnabled ? Pause : Play;
+
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-lg border-b transition-all duration-300 ${
       theme === 'dark' 
@@ -65,6 +83,7 @@ const Header: React.FC<HeaderProps> = ({
               theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
             }`} />
             <input
+              id={SEARCH_INPUT_ID}
               type="text"
               placeholder="Search clipboard history..."
               value={searchQuery}
@@ -139,6 +158,24 @@ const Header: React.FC<HeaderProps> = ({
             style={{ backgroundColor: showFavoritesOnly ? accentColor : 'transparent' }}
           >
             <Star className={`w-4 h-4 ${showFavoritesOnly ? 'fill-current' : ''}`} />
+          </button>
+
+          {/* Capture Toggle */}
+          <button
+            onClick={onToggleCapture}
+            disabled={captureUnavailable}
+            title={captureTitle}
+            aria-label={captureTitle}
+            className={`p-2 rounded-lg transition-all duration-300 ${
+              captureUnavailable
+                ? 'text-amber-500 cursor-not-allowed'
+                : !captureEnabled
+                  ? 'text-white'
+                  : theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+            style={{ backgroundColor: !captureEnabled && !captureUnavailable ? accentColor : 'transparent' }}
+          >
+            <CaptureIcon className="w-4 h-4" />
           </button>
 
           {/* Settings Button */}

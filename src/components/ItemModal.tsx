@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Star, Tag, Trash2, Copy, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardItem, Theme, AccentColor } from '../types';
+import FileSummary from './FileSummary';
 
 interface ItemModalProps {
   item: ClipboardItem;
@@ -140,17 +141,21 @@ const ItemModal: React.FC<ItemModalProps> = ({
             </div>
           ) : null}
 
-          <div className={`p-4 rounded-lg border ${
-            theme === 'dark' 
-              ? 'bg-gray-800/50 border-gray-600' 
-              : 'bg-gray-50/50 border-gray-200'
-          }`}>
-            <pre className={`text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] font-mono ${
-              theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+          {item.files.length > 0 ? (
+            <FileSummary files={item.files} theme={theme} accentColor={accentColor} />
+          ) : (
+            <div className={`p-4 rounded-lg border ${
+              theme === 'dark' 
+                ? 'bg-gray-800/50 border-gray-600' 
+                : 'bg-gray-50/50 border-gray-200'
             }`}>
-              {item.content}
-            </pre>
-          </div>
+              <pre className={`text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] font-mono ${
+                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+              }`}>
+                {item.content}
+              </pre>
+            </div>
+          )}
         </div>
 
         {/* Tags Section */}

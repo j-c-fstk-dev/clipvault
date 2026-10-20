@@ -85,6 +85,17 @@ pub enum Category {
 }
 
 impl Category {
+    /// Human-readable name, as shown in the UI.
+    pub fn label(self) -> &'static str {
+        match self {
+            Category::Text => "Text",
+            Category::Link => "Link",
+            Category::Image => "Image",
+            Category::File => "File",
+            Category::Folder => "Folder",
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Category::Text => "text",
