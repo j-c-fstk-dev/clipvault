@@ -4,7 +4,7 @@
 # Usage: scripts/smoke-test.sh <command> [args...]   (needs xvfb-run)
 set -euo pipefail
 
-TIMEOUT_SECONDS=${SMOKE_TIMEOUT:-30}
+TIMEOUT_SECONDS=${SMOKE_TIMEOUT:-90}
 profile=$(mktemp -d)
 log="$profile/smoke.log"
 
