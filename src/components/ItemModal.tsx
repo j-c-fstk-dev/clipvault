@@ -145,7 +145,7 @@ const ItemModal: React.FC<ItemModalProps> = ({
               ? 'bg-gray-800/50 border-gray-600' 
               : 'bg-gray-50/50 border-gray-200'
           }`}>
-            <pre className={`text-sm leading-relaxed whitespace-pre-wrap font-mono ${
+            <pre className={`text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] font-mono ${
               theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
             }`}>
               {item.content}

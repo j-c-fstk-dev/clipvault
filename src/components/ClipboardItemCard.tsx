@@ -158,7 +158,7 @@ const ClipboardItemCard: React.FC<ClipboardItemCardProps> = ({
           </div>
         ) : null}
 
-        <p className={`text-sm leading-relaxed ${
+        <p className={`text-sm leading-relaxed [overflow-wrap:anywhere] ${
           theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
         }`}>
           {formatContent(item.content)}

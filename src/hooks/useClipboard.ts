@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ClipboardItem } from '../types';
+import * as backend from '../lib/backend';
 
-// Mock data for demonstration
+// Mock data, used when the UI runs in a plain browser (`npm run dev`).
 const generateMockData = (): ClipboardItem[] => {
   const mockItems: ClipboardItem[] = [
     {
@@ -83,52 +84,75 @@ const generateMockData = (): ClipboardItem[] => {
 };
 
 export const useClipboard = () => {
-  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>([]);
+  const [clipboardItems, setClipboardItems] = useState<ClipboardItem[]>(() =>
+    backend.hasBackend ? [] : generateMockData()
+  );
 
-  useEffect(() => {
-    // Initialize with mock data
-    setClipboardItems(generateMockData());
+  const refresh = useCallback(async () => {
+    if (!backend.hasBackend) return;
+    try {
+      setClipboardItems(await backend.listItems());
+    } catch (error) {
+      console.error('Failed to load clipboard history:', error);
+    }
   }, []);
 
-  const addItem = (item: ClipboardItem) => {
-    setClipboardItems(prev => [item, ...prev]);
+  useEffect(() => {
+    if (!backend.hasBackend) return;
+    refresh();
+    const unlisten = backend.onHistoryChanged(refresh);
+    return () => {
+      unlisten.then(stop => stop());
+    };
+  }, [refresh]);
+
+  /** Applies a change locally, or through the backend and then reloads. */
+  const update = (
+    remote: () => Promise<unknown>,
+    local: (items: ClipboardItem[]) => ClipboardItem[]
+  ) => {
+    if (backend.hasBackend) {
+      remote().then(refresh, error => console.error('Clipboard update failed:', error));
+    } else {
+      setClipboardItems(local);
+    }
   };
 
   const toggleFavorite = (id: string) => {
-    setClipboardItems(prev =>
-      prev.map(item =>
-        item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
-      )
+    const item = clipboardItems.find(i => i.id === id);
+    if (!item) return;
+    update(
+      () => backend.setFavorite(id, !item.isFavorite),
+      prev => prev.map(i => (i.id === id ? { ...i, isFavorite: !i.isFavorite } : i))
     );
   };
 
   const addTag = (id: string, tag: string) => {
-    setClipboardItems(prev =>
-      prev.map(item =>
-        item.id === id && !item.tags.includes(tag)
-          ? { ...item, tags: [...item.tags, tag] }
-          : item
-      )
+    update(
+      () => backend.addTag(id, tag),
+      prev =>
+        prev.map(i =>
+          i.id === id && !i.tags.includes(tag) ? { ...i, tags: [...i.tags, tag] } : i
+        )
     );
   };
 
   const removeTag = (id: string, tag: string) => {
-    setClipboardItems(prev =>
-      prev.map(item =>
-        item.id === id
-          ? { ...item, tags: item.tags.filter(t => t !== tag) }
-          : item
-      )
+    update(
+      () => backend.removeTag(id, tag),
+      prev => prev.map(i => (i.id === id ? { ...i, tags: i.tags.filter(t => t !== tag) } : i))
     );
   };
 
   const deleteItem = (id: string) => {
-    setClipboardItems(prev => prev.filter(item => item.id !== id));
+    update(
+      () => backend.deleteItem(id),
+      prev => prev.filter(i => i.id !== id)
+    );
   };
 
   return {
     clipboardItems,
-    addItem,
     toggleFavorite,
     addTag,
     removeTag,

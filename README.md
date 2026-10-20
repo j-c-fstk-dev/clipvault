@@ -17,12 +17,21 @@
 
 ---
 
-> **Status:** early development. The desktop shell and UI are in place; real
-> clipboard capture and persistent history are being built (see
+> **Status:** early development. Clipboard capture and persistent history
+> work; copying items back, tray and backups are next (see
 > [Roadmap](#-roadmap)).
 
 ## ✨ Features
 
+- **Real-time capture** on X11 — event driven, no polling — of text, HTML,
+  images and files/folders copied in your file manager
+- **File snapshots** — copied files are also saved in the vault (up to 25 MB
+  per copy by default), so they survive being moved or deleted
+- **Persistent history** in SQLite; copying something again moves it to the
+  top instead of duplicating it; oldest items are pruned past the limit
+  (favorites are always kept)
+- **Privacy** — content marked secret by password managers (e.g. KeePassXC)
+  is never stored, and capture can be paused
 - **Category tabs** — text, links, images, files and folders, plus an "All" view
 - **Grid and list views**, sorting by date or name, instant search
 - **Favorites and custom tags** to organize what matters
@@ -30,10 +39,17 @@
 - **Full-screen preview** with metadata and quick actions
 - **Native and lightweight** — Rust backend with the system WebKitGTK, ~2 MB `.deb`
 
-Planned for the first release: real-time capture of every clipboard format,
-persistent history in SQLite, file snapshots (copies the files you copy, up
-to a size limit), tray icon, global shortcut, autostart and `.zip`
-export/import for backups.
+Planned for the first release: copying any item back (images and files
+included), tray icon, global shortcut, autostart and `.zip` export/import
+for backups.
+
+### Where data lives
+
+| What | Path |
+|---|---|
+| History database | `~/.local/share/com.jorgecristo.clipvault/clipvault.db` |
+| Images and file snapshots | `~/.local/share/com.jorgecristo.clipvault/blobs/` |
+| Settings | `~/.config/com.jorgecristo.clipvault/settings.json` |
 
 ## 📦 Install
 
@@ -80,6 +96,12 @@ npm run lint && npm run build
 cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
+The clipboard capture integration test needs an X server and `xclip`; it is
+skipped without them. To run it headless:
+`sudo apt install xvfb xclip && xvfb-run -a cargo test`.
+
+Set `RUST_LOG=clipvault_lib=debug` for verbose backend logs.
+
 ### Project structure
 
 ```
@@ -87,9 +109,17 @@ clipvault/
 ├── src/                     # React + TypeScript UI
 │   ├── components/          # Header, Sidebar, views, modal, settings
 │   ├── hooks/               # useClipboard, useSettings, useTheme
+│   ├── lib/backend.ts       # Typed calls to the Rust commands
 │   └── types/               # Shared types
 ├── src-tauri/               # Rust backend (Tauri 2)
-│   ├── src/                 # main.rs, lib.rs
+│   ├── src/
+│   │   ├── capture.rs       # X11 clipboard watcher (XFixes, INCR)
+│   │   ├── store.rs         # SQLite history, images, file snapshots
+│   │   ├── model.rs         # Item types and parsing helpers
+│   │   ├── settings.rs      # settings.json
+│   │   ├── commands.rs      # Commands called by the UI
+│   │   └── lib.rs           # App setup
+│   ├── tests/               # X11 capture integration test
 │   ├── capabilities/        # Window permissions
 │   ├── icons/               # App icons
 │   └── tauri.conf.json      # App and bundle config
@@ -105,7 +135,7 @@ clipvault/
 ## 📋 Roadmap
 
 - [x] **Stage 1 — Foundation:** Tauri 2 app, AGPL-3.0, CI
-- [ ] **Stage 2 — Core:** X11 clipboard watcher (text, HTML, images, files), dedup, SQLite history, file snapshots, password-manager filtering
+- [x] **Stage 2 — Core:** X11 clipboard watcher (text, HTML, images, files), dedup, SQLite history, file snapshots, password-manager filtering
 - [ ] **Stage 3 — UI wiring:** real data instead of mocks, copy back any format, persistent settings
 - [ ] **Stage 4 — System:** tray, global shortcut, autostart, notifications
 - [ ] **Stage 5 — Backup:** `.zip` export / import with merge
