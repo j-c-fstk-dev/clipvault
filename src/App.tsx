@@ -1,28 +1,16 @@
-// App.tsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ClipboardList, Image, FileText, Link, Folder, File } from 'lucide-react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ClipboardView from './components/ClipboardView';
 import SettingsPanel from './components/SettingsPanel';
-import { ViewMode, SortOption } from './types';
-import { useClipboard, ClipboardItem, ClipboardCategory } from './hooks/useClipboard';
+import { ViewMode, SortOption, ClipboardCategory } from './types';
+import { useClipboard } from './hooks/useClipboard';
 import { useSettings } from './hooks/useSettings';
 import { useTheme } from './hooks/useTheme';
-// Importação direta do 'electron' removida, pois não é segura ou funcional no frontend.
-// import { clipboard } from 'electron'; 
-
-// Declaração global para que o TypeScript reconheça a API que expomos no preload.js
-declare global {
-  interface Window {
-    electronAPI: {
-      saveClipboard: () => Promise<string>;
-    };
-  }
-}
 
 function App() {
-  const { clipboardItems, addItem, toggleFavorite, addTag, removeTag, deleteItem } = useClipboard();
+  const { clipboardItems, toggleFavorite, addTag, removeTag, deleteItem } = useClipboard();
   const { settings, updateSettings } = useSettings();
   const { theme, accentColor, setTheme, setAccentColor } = useTheme();
 
@@ -32,48 +20,6 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-
-  // Categorize content
-  const categorizeContent = (content: string): ClipboardCategory => {
-    if (content.startsWith('http://') || content.startsWith('https://')) {
-      return 'link';
-    } else {
-      return 'text';
-    }
-  };
-
-  // Function to read and save clipboard
-  // Agora, esta função é assíncrona para esperar o retorno do processo principal
-  const saveClipboard = async () => {
-    // Chamamos a API segura que definimos no preload.js
-    const content = await window.electronAPI.saveClipboard();
-    if (content) {
-      const category = categorizeContent(content);
-      const newItem: ClipboardItem = {
-        id: Date.now().toString(),
-        content,
-        category,
-        timestamp: new Date().toISOString(),
-        isFavorite: false,
-        tags: [],
-      };
-      addItem(newItem);
-    }
-  };
-
-  // Read clipboard on app load and focus
-  useEffect(() => {
-    // A função saveClipboard agora é assíncrona, então precisamos chamá-la de forma assíncrona
-    saveClipboard(); // Initial clipboard save
-
-    // O setInterval também precisa ser ajustado para chamar a função assíncrona
-    const intervalId = setInterval(() => {
-      saveClipboard();
-    }, 5000); // Save clipboard every 5 seconds
-
-    // Clear interval on component unmount
-    return () => clearInterval(intervalId);
-  }, []);
 
   // Filter and sort items
   const filteredItems = clipboardItems
@@ -158,7 +104,6 @@ function App() {
             />
 
             <main className="flex-1 overflow-hidden">
-              <button onClick={saveClipboard}>Save Clipboard</button>
               <ClipboardView
                 items={filteredItems}
                 viewMode={viewMode}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, Tag, Trash2, Copy, ExternalLink, Download, Eye, FileText, Link, Image, File, Folder } from 'lucide-react';
+import { Star, Tag, Trash2, Copy, Eye, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardItem, Theme, AccentColor } from '../types';
 
 interface ClipboardItemListProps {

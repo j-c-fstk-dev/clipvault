@@ -74,10 +74,10 @@ const Header: React.FC<HeaderProps> = ({
                   ? 'bg-gray-800/50 border-gray-600 text-white placeholder-gray-400 focus:border-gray-500'
                   : 'bg-white/50 border-gray-300 text-gray-900 placeholder-gray-500 focus:border-gray-400'
               }`}
-              style={{ 
-                focusRingColor: `${accentColor}40`,
+              style={{
+                '--tw-ring-color': `${accentColor}40`,
                 borderColor: searchQuery ? accentColor : undefined
-              }}
+              } as React.CSSProperties}
             />
           </div>
         </div>

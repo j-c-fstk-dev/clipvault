@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Star, Tag, Trash2, Copy, Download, ExternalLink, FileText, Link, Image, File, Folder } from 'lucide-react';
+import { X, Star, Tag, Trash2, Copy, FileText, Link, Image, File, Folder } from 'lucide-react';
 import { ClipboardItem, Theme, AccentColor } from '../types';
 
 interface ItemModalProps {

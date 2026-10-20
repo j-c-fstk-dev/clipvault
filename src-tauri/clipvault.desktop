@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ClipVault
+GenericName=Clipboard Manager
+Comment={{comment}}
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories={{categories}}
+Keywords=clipboard;history;copy;paste;
+StartupWMClass=clipvault

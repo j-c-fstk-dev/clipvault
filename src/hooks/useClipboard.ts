@@ -1,18 +1,5 @@
 import { useState, useEffect } from 'react';
-
-export type ClipboardCategory = 'text' | 'link' | 'image' | 'file' | 'folder';
-
-export interface ClipboardItem {
-  id: string;
-  content: string;
-  category: ClipboardCategory;
-  timestamp: string;
-  size?: number;
-  filename?: string;
-  thumbnailUrl?: string;
-  isFavorite: boolean;
-  tags: string[];
-}
+import { ClipboardItem } from '../types';
 
 // Mock data for demonstration
 const generateMockData = (): ClipboardItem[] => {
