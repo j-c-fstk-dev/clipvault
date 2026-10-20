@@ -88,12 +88,26 @@ jobs:
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Install the .deb
+        run: sudo apt-get install -y ./release/*.deb
+
+      # The runner is a VM without a GPU, and its sandboxing rules may not let
+      # WebKit's bubblewrap sandbox create user namespaces. These variables
+      # only affect this smoke test, not the packages.
       - name: Smoke test the .deb
+        env:
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
-          sudo apt-get install -y ./release/*.deb
+          echo "user namespaces: $(unshare --user true 2>/dev/null && echo allowed || echo blocked)"
           scripts/smoke-test.sh /usr/bin/clipvault
 
       - name: Smoke test the AppImage
+        env:
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           chmod +x release/*.AppImage
           scripts/smoke-test.sh release/*.AppImage
