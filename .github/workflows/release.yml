@@ -1,0 +1,121 @@
+name: Release
+
+# Pushing a tag like v0.2.0 builds, tests and publishes a GitHub release
+# with the .deb, the AppImage and SHA256SUMS. Tags with a suffix
+# (v0.2.0-beta.1) are published as pre-releases.
+#
+# Pull requests that touch packaging run the same build as a dry run and
+# keep the packages as a workflow artifact, without publishing anything.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/**"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/clipvault.desktop"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    # Oldest supported Ubuntu keeps the glibc baseline low, so the packages
+    # run on older distros too.
+    runs-on: ubuntu-22.04
+    env:
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      # linuxdeploy (used for the AppImage) needs FUSE unless told to extract itself.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev \
+            patchelf xvfb xclip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Check that the versions match the tag
+        if: env.IS_TAG == 'true'
+        run: node scripts/check-version.mjs "$GITHUB_REF_NAME"
+
+      - name: Release notes from CHANGELOG.md
+        if: env.IS_TAG == 'true'
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
+
+      # Also produces dist/, which the Rust tests embed.
+      - name: Build frontend
+        run: npm run build
+
+      - name: Test
+        working-directory: src-tauri
+        run: xvfb-run -a cargo test
+
+      - name: Build packages
+        run: npx tauri build
+
+      - name: Collect packages and checksums
+        run: |
+          mkdir release
+          cp src-tauri/target/release/bundle/deb/*.deb \
+             src-tauri/target/release/bundle/appimage/*.AppImage release/
+          cd release
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Install the .deb
+        run: sudo apt-get install -y ./release/*.deb
+
+      # The build just wrote gigabytes; flush them first, or the app's first
+      # database write waits for all of it (seen: 30 s in jbd2_log_wait_commit).
+      - name: Flush disk writes
+        run: sync
+
+      - name: Smoke test the .deb
+        run: scripts/smoke-test.sh /usr/bin/clipvault
+
+      - name: Smoke test the AppImage
+        run: |
+          chmod +x release/*.AppImage
+          scripts/smoke-test.sh release/*.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clipvault-packages
+          path: release/
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: env.IS_TAG == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ClipVault ${{ github.ref_name }}
+          body_path: release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release/*
+          fail_on_unmatched_files: true

@@ -8,6 +8,7 @@
   *A clipboard manager for Linux that remembers everything you copy — text, links, images, files and folders.*
 
   [![CI](https://github.com/j-c-fstk-dev/clipvault/actions/workflows/ci.yml/badge.svg)](https://github.com/j-c-fstk-dev/clipvault/actions/workflows/ci.yml)
+  [![Release](https://img.shields.io/github/v/release/j-c-fstk-dev/clipvault?include_prereleases)](https://github.com/j-c-fstk-dev/clipvault/releases)
   [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
   [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB.svg)](https://v2.tauri.app/)
   [![Rust](https://img.shields.io/badge/Rust-stable-orange.svg)](https://www.rust-lang.org/)
@@ -17,9 +18,8 @@
 
 ---
 
-> **Status:** early development. Capture, history, search, copying back,
-> tray, global shortcut, autostart and backups work; release packages are
-> next (see [Roadmap](#-roadmap)).
+> **Status:** early development — the first release is 0.1.0. See the
+> [Roadmap](#-roadmap) for what comes next.
 
 ## ✨ Features
 
@@ -51,8 +51,6 @@
 - **Full-screen preview** with metadata and quick actions
 - **Native and lightweight** — Rust backend with the system WebKitGTK, ~2 MB `.deb`
 
-Planned for the first release: packages on the Releases page.
-
 ### Keyboard
 
 | Keys | Action |
@@ -76,7 +74,7 @@ The show/hide, copy and delete shortcuts can be changed in Settings.
 
 ## 📦 Install
 
-Pre-built `.deb` and `.AppImage` packages will be published on the
+Download the latest `.deb` or `.AppImage` from the
 [Releases](https://github.com/j-c-fstk-dev/clipvault/releases) page.
 
 ```bash
@@ -86,6 +84,9 @@ sudo apt install ./clipvault_<version>_amd64.deb
 # Any distro
 chmod +x clipvault_<version>_amd64.AppImage
 ./clipvault_<version>_amd64.AppImage
+
+# Optional: verify the download (SHA256SUMS is attached to each release)
+sha256sum -c SHA256SUMS --ignore-missing
 ```
 
 Currently targeting **X11** desktops (XFCE, MATE, Cinnamon, KDE on X11…).
@@ -150,7 +151,8 @@ clipvault/
 │   ├── capabilities/        # Window permissions
 │   ├── icons/               # App icons
 │   └── tauri.conf.json      # App and bundle config
-└── .github/workflows/       # CI
+├── scripts/                 # Versioning, release notes, smoke test
+└── .github/workflows/       # CI and releases
 ```
 
 ### Tech stack
@@ -166,12 +168,14 @@ clipvault/
 - [x] **Stage 3 — UI wiring:** real data instead of mocks, copy back any format, persistent settings
 - [x] **Stage 4 — System:** tray, global shortcut, autostart, notifications
 - [x] **Stage 5 — Backup:** `.zip` export / import with merge
-- [ ] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
+- [x] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Maintainers: see
+[RELEASING.md](RELEASING.md) for cutting a release and
+[CHANGELOG.md](CHANGELOG.md) for the history of changes.
 
 ## 📄 License
 

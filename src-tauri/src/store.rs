@@ -190,6 +190,9 @@ impl Store {
         fs::create_dir_all(data_dir.join(BLOBS_DIR))?;
         let conn = Connection::open(data_dir.join(DB_FILE))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        // Safe with WAL (a crash can lose the latest commits, never corrupt
+        // the database) and avoids waiting for the disk on every capture.
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", true)?;
         migrate(&conn)?;
         Ok(Self {
@@ -1561,6 +1564,19 @@ mod tests {
         assert_eq!((stats.added, stats.skipped), (1, 1));
         let item = &store.list(10, 0).unwrap()[0];
         assert_eq!(item.image_path, None, "path escaping blobs/<hash>/ dropped");
+    }
+
+    #[test]
+    fn uses_wal_without_fsync_per_commit() {
+        let (_dir, store) = open();
+        let conn = store.conn();
+        let mode: String = conn
+            .pragma_query_value(None, "journal_mode", |r| r.get(0))
+            .unwrap();
+        let synchronous: i64 = conn
+            .pragma_query_value(None, "synchronous", |r| r.get(0))
+            .unwrap();
+        assert_eq!((mode.as_str(), synchronous), ("wal", 1)); // 1 = NORMAL
     }
 
     #[test]
