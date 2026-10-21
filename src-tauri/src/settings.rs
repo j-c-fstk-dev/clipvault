@@ -35,6 +35,9 @@ pub struct Settings {
     pub open_with: BTreeMap<String, String>,
     /// Language of the window, tray menu and notifications.
     pub language: Language,
+    /// [`Settings::VERSION`] when saved; 0 in files saved before it existed.
+    #[serde(default)]
+    pub version: u32,
 }
 
 impl Default for Settings {
@@ -50,6 +53,7 @@ impl Default for Settings {
             shortcuts: Shortcuts::default(),
             open_with: BTreeMap::new(),
             language: Language::Auto,
+            version: Settings::VERSION,
         }
     }
 }
@@ -67,7 +71,9 @@ pub struct Shortcuts {
 impl Default for Shortcuts {
     fn default() -> Self {
         Self {
-            toggle_app: "Ctrl+Shift+V".into(),
+            // Apps rarely use Super (Cmd on macOS), which desktops reserve,
+            // so this does not take a shortcut from the app in front.
+            toggle_app: "Ctrl+Super+V".into(),
             copy_selected: "Ctrl+C".into(),
             delete_selected: "Delete".into(),
         }
@@ -76,6 +82,9 @@ impl Default for Shortcuts {
 
 impl Settings {
     pub const MAX_ITEMS_LIMIT: u32 = 99_999;
+    /// Saved with the settings. 1: the show/hide default changed from
+    /// Ctrl+Shift+V, which is paste in terminals.
+    pub const VERSION: u32 = 1;
 
     pub fn snapshot_limit_bytes(&self) -> u64 {
         self.snapshot_limit_mb.saturating_mul(1024 * 1024)
@@ -84,6 +93,15 @@ impl Settings {
     /// Clamps values into their supported ranges.
     pub fn sanitized(mut self) -> Self {
         self.max_items = self.max_items.clamp(1, Self::MAX_ITEMS_LIMIT);
+        self.version = Self::VERSION;
+        self
+    }
+
+    /// Updates settings saved by an older version.
+    fn migrated(mut self) -> Self {
+        if self.version < 1 && self.shortcuts.toggle_app == "Ctrl+Shift+V" {
+            self.shortcuts.toggle_app = Shortcuts::default().toggle_app;
+        }
         self
     }
 }
@@ -132,7 +150,7 @@ impl SettingsFile {
     pub fn load(&self) -> Settings {
         match fs::read_to_string(&self.path) {
             Ok(json) => serde_json::from_str::<Settings>(&json)
-                .map(Settings::sanitized)
+                .map(|settings| settings.migrated().sanitized())
                 .unwrap_or_else(|err| {
                     log::warn!("ignoring invalid {}: {err}", self.path.display());
                     Settings::default()
@@ -160,6 +178,27 @@ impl SettingsFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moves_off_the_old_default_shortcut_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = SettingsFile::new(dir.path());
+        let path = dir.path().join("settings.json");
+
+        fs::write(&path, r#"{"shortcuts": {"toggleApp": "Ctrl+Shift+V"}}"#).unwrap();
+        assert_eq!(file.load().shortcuts.toggle_app, "Ctrl+Super+V");
+
+        fs::write(&path, r#"{"shortcuts": {"toggleApp": "Alt+V"}}"#).unwrap();
+        assert_eq!(file.load().shortcuts.toggle_app, "Alt+V");
+
+        // Chosen again after the change: kept.
+        fs::write(
+            &path,
+            r#"{"version": 1, "shortcuts": {"toggleApp": "Ctrl+Shift+V"}}"#,
+        )
+        .unwrap();
+        assert_eq!(file.load().shortcuts.toggle_app, "Ctrl+Shift+V");
+    }
 
     #[test]
     fn round_trips_and_fills_defaults() {

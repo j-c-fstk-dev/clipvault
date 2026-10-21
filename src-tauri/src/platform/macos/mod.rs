@@ -1,6 +1,6 @@
-//! macOS. Being ported (see `docs/macos-port.md`): the app builds and runs,
-//! start-on-login works, and opening a file uses its default app, but
-//! clipboard capture and following moved files are not available yet.
+//! macOS. Being ported (see `docs/macos-port.md`): clipboard capture and
+//! copying back, start on login, and opening a file with its default app
+//! work; following moved files is not available yet.
 
 pub mod autostart;
 pub mod capture;

@@ -49,7 +49,7 @@
   deleted, the saved copy is pasted instead
 - **Privacy** — content marked secret by password managers (e.g. KeePassXC)
   is never stored, and capture can be paused
-- **Always at hand** — lives in the tray; `Ctrl+Shift+V` (configurable)
+- **Always at hand** — lives in the tray; `Ctrl+Super+V` (configurable)
   brings it up from anywhere, arrow keys pick an item and `Ctrl+C` copies it
   and gets out of the way so you can paste
 - **Starts with your session** (optional), hidden in the tray; optional
@@ -80,7 +80,7 @@
 
 | Keys | Action |
 |---|---|
-| `Ctrl+Shift+V` | Show / hide ClipVault from anywhere |
+| `Ctrl+Super+V` | Show / hide ClipVault from anywhere (`Super` is the Windows key; `Ctrl+Cmd+V` on macOS) |
 | `↑` `↓` `←` `→` | Select an item |
 | `Enter` | Open the selected item's preview |
 | `Ctrl+C` | Copy the selected item and hide ClipVault |

@@ -34,6 +34,8 @@ export interface CaptureStatus {
   paused: boolean;
   error?: string;
   wayland: boolean;
+  /** macOS: whether the user lets ClipVault read the clipboard; `null` when there is no such setting or no choice yet. */
+  access: 'allowed' | 'ask' | 'denied' | null;
 }
 
 /** Mirrors `backup::ExportStats` in src-tauri. */

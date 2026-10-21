@@ -49,7 +49,7 @@
   movido ou apagado, a cópia salva é colada no lugar
 - **Privacidade** — conteúdo marcado como secreto por gerenciadores de senhas
   (como o KeePassXC) nunca é guardado, e a gravação pode ser pausada
-- **Sempre à mão** — fica na bandeja; `Ctrl+Shift+V` (configurável) chama o app
+- **Sempre à mão** — fica na bandeja; `Ctrl+Super+V` (configurável) chama o app
   de qualquer lugar, as setas escolhem um item e `Ctrl+C` copia e sai da frente
   para você colar
 - **Inicia com a sessão** (opcional), oculto na bandeja; notificações opcionais
@@ -80,7 +80,7 @@
 
 | Teclas | Ação |
 |---|---|
-| `Ctrl+Shift+V` | Mostrar / ocultar o ClipVault de qualquer lugar |
+| `Ctrl+Super+V` | Mostrar / ocultar o ClipVault de qualquer lugar (`Super` é a tecla Windows; `Ctrl+Cmd+V` no macOS) |
 | `↑` `↓` `←` `→` | Selecionar um item |
 | `Enter` | Abrir a prévia do item selecionado |
 | `Ctrl+C` | Copiar o item selecionado e ocultar o ClipVault |

@@ -15,7 +15,7 @@ const defaultSettings: Settings = {
   openWith: {},
   language: 'auto',
   shortcuts: {
-    toggleApp: 'Ctrl+Shift+V',
+    toggleApp: 'Ctrl+Super+V',
     copySelected: 'Ctrl+C',
     deleteSelected: 'Delete',
   },

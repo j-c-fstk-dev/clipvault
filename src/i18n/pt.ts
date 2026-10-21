@@ -47,6 +47,10 @@ export const pt: Messages = {
     pausedDetail: 'Novas cópias não são salvas',
     pause: 'Pausar gravação',
     resume: 'Retomar gravação',
+    needsAccess: 'Precisa de permissão',
+    askDetail: 'O macOS pergunta toda vez que o ClipVault lê uma cópia. Marque o ClipVault como Permitir em Privacidade e Segurança → Colar de Outros Apps.',
+    deniedDetail: 'O ClipVault não tem permissão para ler cópias. Marque-o como Permitir em Privacidade e Segurança → Colar de Outros Apps.',
+    openSettings: 'Abrir Ajustes do Sistema',
   },
 
   toolbar: {

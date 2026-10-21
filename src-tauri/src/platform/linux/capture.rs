@@ -22,7 +22,7 @@ use x11rb::rust_connection::RustConnection;
 use x11rb::{CURRENT_TIME, NONE};
 
 use super::serve::{ClipboardHandle, Server};
-use crate::model::{decode_html, decode_latin1, parse_uri_list, Captured};
+use crate::model::{decode_html, decode_latin1, parse_uri_list, Captured, ClipboardAccess};
 
 pub(crate) type BoxError = Box<dyn Error + Send + Sync>;
 pub(crate) type Result<T> = std::result::Result<T, BoxError>;
@@ -88,6 +88,15 @@ impl Target {
             .map(|(_, name)| *name)
             .unwrap_or_default()
     }
+}
+
+/// X11 has no permission for reading the clipboard.
+pub fn access() -> Option<ClipboardAccess> {
+    None
+}
+
+pub fn open_access_settings() -> std::result::Result<(), String> {
+    Err("there is no clipboard permission to change".into())
 }
 
 fn is_secret(offered: &[Target]) -> bool {

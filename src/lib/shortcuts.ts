@@ -1,6 +1,6 @@
 /**
  * Keyboard accelerators in the format the backend's global-shortcut parser
- * accepts, e.g. `Ctrl+Shift+V`, `Super+V`, `Delete`.
+ * accepts, e.g. `Ctrl+Super+V`, `Alt+V`, `Delete`.
  */
 
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'Super', 'Hyper', 'OS', 'AltGraph']);

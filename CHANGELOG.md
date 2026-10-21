@@ -6,6 +6,21 @@ All notable changes to ClipVault are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- macOS: ClipVault records copies (text with formatting, links, images,
+  Finder files) and copies items back. Content marked by password managers
+  is skipped. When macOS asks for permission to read the clipboard, the
+  sidebar explains where to allow it and opens System Settings
+- The *macOS preview* workflow builds a test `.dmg` (Apple Silicon and Intel)
+
+### Changed
+
+- The default show/hide shortcut is now `Ctrl+Super+V` (`Ctrl+Cmd+V` on
+  macOS), because `Ctrl+Shift+V` is paste in terminals and paste as plain
+  text in many apps. Settings that still have `Ctrl+Shift+V` are moved to
+  the new default once; it can be chosen again in Settings
+
 ### Changed
 
 - Groundwork for macOS: code that depends on the operating system moved to

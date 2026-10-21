@@ -12,6 +12,7 @@ interface SidebarProps {
   /** `null` until known, or when running outside the desktop app. */
   captureStatus: CaptureStatus | null;
   onToggleCapture: () => void;
+  onOpenAccessSettings: () => void;
 }
 
 /** Floating glass sidebar: categories and whether copying is being recorded. */
@@ -22,15 +23,26 @@ const Sidebar: React.FC<SidebarProps> = ({
   captureEnabled,
   captureStatus,
   onToggleCapture,
+  onOpenAccessSettings,
 }) => {
   const { t } = useI18n();
   const unavailable = captureStatus !== null && !captureStatus.available;
+  const access = captureStatus?.access;
+  const blocked = !unavailable && (access === 'ask' || access === 'denied');
   const [state, detail] = unavailable
     ? [t.sidebar.unavailable, captureStatus.error ?? t.sidebar.unavailableDetail]
-    : captureEnabled
+    : blocked
+      ? [t.sidebar.needsAccess, access === 'ask' ? t.sidebar.askDetail : t.sidebar.deniedDetail]
+      : captureEnabled
       ? [t.sidebar.recording, captureStatus?.wayland ? t.sidebar.waylandNote : t.sidebar.itemsSaved(counts.all)]
       : [t.sidebar.paused, t.sidebar.pausedDetail];
-  const dot = unavailable ? 'bg-danger' : captureEnabled ? 'bg-[#34c759]' : 'bg-faint';
+  const dot = unavailable
+    ? 'bg-danger'
+    : blocked
+      ? 'bg-[#ff9f0a]'
+      : captureEnabled
+        ? 'bg-[#34c759]'
+        : 'bg-faint';
 
   return (
     <aside className="w-[232px] shrink-0 h-full p-2.5 pr-0">
@@ -71,7 +83,16 @@ const Sidebar: React.FC<SidebarProps> = ({
             {state}
           </div>
           <p className="mt-0.5 text-caption text-muted [overflow-wrap:anywhere]">{detail}</p>
-          {!unavailable && captureStatus !== null && (
+          {blocked && (
+            <button
+              type="button"
+              onClick={onOpenAccessSettings}
+              className="pill mt-2.5 w-full h-7 rounded-lg text-small font-medium hover:text-accent transition-colors"
+            >
+              {t.sidebar.openSettings}
+            </button>
+          )}
+          {!unavailable && !blocked && captureStatus !== null && (
             <button
               type="button"
               onClick={onToggleCapture}
