@@ -310,6 +310,25 @@ pub fn file_name(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
+/// Content to put on the clipboard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Outgoing {
+    Text {
+        text: String,
+        html: Option<String>,
+    },
+    Image {
+        bytes: Vec<u8>,
+        mime: String,
+    },
+    Files {
+        paths: Vec<PathBuf>,
+        /// Contents of a single copied image file, also offered as an image
+        /// so apps that cannot take files (chats, editors) can paste it.
+        image: Option<(Vec<u8>, String)>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

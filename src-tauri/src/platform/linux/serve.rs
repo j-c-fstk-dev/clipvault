@@ -4,7 +4,6 @@
 //! from the app that pastes, on the watcher's connection and thread. Large
 //! payloads are sent with the INCR protocol.
 
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -18,31 +17,13 @@ use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::{CURRENT_TIME, NONE};
 
-use crate::capture::{Atoms, Result, Target};
+use super::capture::{Atoms, Result, Target};
+use crate::model::Outgoing;
 
 /// Largest payload sent in one property; bigger ones use INCR.
 const MAX_CHUNK: usize = 256 * 1024;
 /// INCR transfers whose requestor stops reading are dropped after this.
 const INCR_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Content to put on the clipboard.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outgoing {
-    Text {
-        text: String,
-        html: Option<String>,
-    },
-    Image {
-        bytes: Vec<u8>,
-        mime: String,
-    },
-    Files {
-        paths: Vec<PathBuf>,
-        /// Contents of a single copied image file, also offered as an image
-        /// so apps that cannot take files (chats, editors) can paste it.
-        image: Option<(Vec<u8>, String)>,
-    },
-}
 
 /// The formats offered for `out`, best first.
 pub(crate) fn offer_entries(out: &Outgoing) -> Vec<(Target, Vec<u8>)> {
@@ -326,6 +307,7 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn targets(out: &Outgoing) -> Vec<Target> {
         offer_entries(out).into_iter().map(|(t, _)| t).collect()

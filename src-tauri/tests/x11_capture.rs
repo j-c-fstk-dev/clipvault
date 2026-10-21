@@ -1,6 +1,7 @@
 //! End-to-end clipboard tests against a real X server, using `xclip` as the
 //! other application (owner when capturing, requestor when pasting). Skipped unless `$DISPLAY` is set and `xclip` is
 //! installed; CI runs it under `xvfb-run`.
+#![cfg(target_os = "linux")]
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -10,9 +11,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-use clipvault_lib::capture::Watcher;
-use clipvault_lib::model::Captured;
-use clipvault_lib::serve::{ClipboardHandle, Outgoing};
+use clipvault_lib::model::{Captured, Outgoing};
+use clipvault_lib::platform::capture::Watcher;
+use clipvault_lib::platform::serve::ClipboardHandle;
 
 /// One watcher shared by every test in this process: watcher threads never
 /// stop, and a leftover one would read the clipboard alongside the next

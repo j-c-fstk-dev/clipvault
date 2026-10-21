@@ -20,6 +20,16 @@ pub fn exec_path() -> io::Result<PathBuf> {
     }
 }
 
+/// Creates or removes the autostart entry in the user's config directory.
+pub fn set(enabled: bool) -> io::Result<()> {
+    let config_home = env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no home directory"))?;
+    set_enabled(&config_home, enabled, &exec_path()?)
+}
+
 /// Creates or removes the autostart entry under `config_home`
 /// (normally `~/.config`).
 pub fn set_enabled(config_home: &Path, enabled: bool, exec: &Path) -> io::Result<()> {

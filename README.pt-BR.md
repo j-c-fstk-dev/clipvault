@@ -187,6 +187,7 @@ A estrutura do projeto está descrita no [README em inglês](README.md#project-s
 - [x] **0.1.1:** abrir com, seguir arquivos movidos, cópias em segundo plano, arquivos de imagem como imagens
 - [x] **0.2.0:** novo visual inspirado no macOS
 - [x] **0.2.1:** rolagem suave nas janelas, inglês e português
+- [ ] **macOS** — em andamento, veja [docs/macos-port.md](docs/macos-port.md) (em inglês)
 - [ ] **Depois:** `.rpm`, Flatpak, AUR, Wayland, atualização automática, sincronização na nuvem (planos pagos)
 
 ## 🤝 Contribuindo

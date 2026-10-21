@@ -4,17 +4,15 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Wry};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
-use x11rb::connection::Connection;
-use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
 
 use crate::i18n::{self, Lang};
 use crate::model::Item;
+use crate::platform::window;
 
 const MAIN_WINDOW: &str = "main";
 /// Emitted when the window is brought up, so the UI can focus the search.
@@ -64,45 +62,15 @@ fn is_in_front(window: &WebviewWindow) -> bool {
     if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
         return false;
     }
-    // GTK misses focus given by the window manager (e.g. at startup), so ask
-    // the window manager first and fall back to GTK.
-    let active = x11_window_id(window).and_then(|id| active_x11_window().map(|a| a == id));
+    // The toolkit can miss focus given by the window manager (GTK at
+    // startup), so ask the system first and fall back to the toolkit.
+    let active = window::is_active(window);
     let focused = active.unwrap_or_else(|| window.is_focused().unwrap_or(false));
     log::debug!(
-        "window in front: {focused} (window manager: {active:?}, gtk: {:?})",
+        "window in front: {focused} (system: {active:?}, toolkit: {:?})",
         window.is_focused()
     );
     focused
-}
-
-fn x11_window_id(window: &WebviewWindow) -> Option<u32> {
-    match window.window_handle().ok()?.as_raw() {
-        RawWindowHandle::Xlib(handle) => u32::try_from(handle.window).ok(),
-        RawWindowHandle::Xcb(handle) => Some(handle.window.get()),
-        _ => None,
-    }
-}
-
-/// The window manager's `_NET_ACTIVE_WINDOW`, if it publishes one (EWMH).
-fn active_x11_window() -> Option<u32> {
-    let (conn, screen) = x11rb::connect(None).ok()?;
-    let root = conn.setup().roots[screen].root;
-    let atom = conn
-        .intern_atom(true, b"_NET_ACTIVE_WINDOW")
-        .ok()?
-        .reply()
-        .ok()?
-        .atom;
-    if atom == x11rb::NONE {
-        return None;
-    }
-    let reply = conn
-        .get_property(false, root, atom, AtomEnum::WINDOW, 0, 1)
-        .ok()?
-        .reply()
-        .ok()?;
-    let active = reply.value32()?.next();
-    active.filter(|&id| id != x11rb::NONE)
 }
 
 /// The tray's menu items, kept to mirror the settings.

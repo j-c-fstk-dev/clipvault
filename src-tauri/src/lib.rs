@@ -6,19 +6,15 @@
 //! [`CAPTURED_EVENT`] event. [`desktop`] adds the tray icon, global shortcut
 //! and notifications; [`autostart`] the start-on-login entry.
 
-pub mod autostart;
 pub mod backup;
-pub mod capture;
 mod commands;
 mod desktop;
 pub mod i18n;
 mod locate;
 pub mod model;
-mod open;
-pub mod serve;
+pub mod platform;
 pub mod settings;
 pub mod store;
-mod track;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -28,14 +24,14 @@ use std::thread;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
-use crate::capture::Watcher;
 use crate::commands::CaptureStatus;
 use crate::desktop::Tray;
 use crate::model::{Item, ItemKind};
-use crate::serve::ClipboardHandle;
+use crate::platform::capture::Watcher;
+use crate::platform::serve::ClipboardHandle;
+use crate::platform::track::Tracker;
 use crate::settings::{Settings, SettingsFile};
 use crate::store::Store;
-use crate::track::Tracker;
 
 /// Emitted with a [`CapturedPayload`] after each stored clipboard change.
 pub const CAPTURED_EVENT: &str = "clipboard-captured";
@@ -101,7 +97,7 @@ pub(crate) fn apply_settings(app: &AppHandle, new: Settings) -> Result<Settings,
         }
     }
     if new.start_on_boot != old.start_on_boot {
-        set_autostart(app, new.start_on_boot)?;
+        set_autostart(new.start_on_boot)?;
     }
 
     state
@@ -124,11 +120,8 @@ pub(crate) fn apply_settings(app: &AppHandle, new: Settings) -> Result<Settings,
     Ok(new)
 }
 
-fn set_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
-    let config_home = app.path().config_dir().map_err(|e| e.to_string())?;
-    let exec = autostart::exec_path().map_err(|e| e.to_string())?;
-    autostart::set_enabled(&config_home, enabled, &exec)
-        .map_err(|e| format!("cannot update the autostart entry: {e}"))
+fn set_autostart(enabled: bool) -> Result<(), String> {
+    platform::autostart::set(enabled).map_err(|e| format!("cannot update the autostart entry: {e}"))
 }
 
 fn toggle_capture(app: &AppHandle) {
@@ -153,7 +146,7 @@ fn start_snapshot_worker(app: AppHandle, store: Arc<Store>) -> Sender<()> {
     let spawned = thread::Builder::new()
         .name("snapshot-worker".into())
         .spawn(move || {
-            lower_priority();
+            platform::lower_priority();
             while woken.recv().is_ok() {
                 while woken.try_recv().is_ok() {} // coalesce bursts
                 match store.process_snapshots() {
@@ -169,24 +162,6 @@ fn start_snapshot_worker(app: AppHandle, store: Arc<Store>) -> Sender<()> {
         log::error!("cannot start snapshot worker: {err}");
     }
     wake
-}
-
-/// Idle I/O class and a higher nice value for the calling thread (both are
-/// per thread on Linux). Failures only mean normal priority.
-fn lower_priority() {
-    const IOPRIO_WHO_PROCESS: libc::c_long = 1;
-    const IOPRIO_CLASS_IDLE: libc::c_long = 3;
-    const IOPRIO_CLASS_SHIFT: libc::c_long = 13;
-    // SAFETY: plain syscalls on the current thread with valid arguments.
-    unsafe {
-        libc::syscall(
-            libc::SYS_ioprio_set,
-            IOPRIO_WHO_PROCESS,
-            0,
-            IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT,
-        );
-        libc::nice(10);
-    }
 }
 
 /// Starts the clipboard watcher and returns a handle for copying back, or
@@ -252,7 +227,7 @@ pub fn run() {
     )
     .init();
 
-    let start_hidden = std::env::args().any(|a| a == autostart::HIDDEN_ARG);
+    let start_hidden = std::env::args().any(|a| a == platform::autostart::HIDDEN_ARG);
 
     tauri::Builder::default()
         // Must come first: a second launch just brings up the running app.
@@ -303,7 +278,7 @@ pub fn run() {
             }
             // Rewrite the entry so it follows the app if it was moved.
             if current.start_on_boot {
-                if let Err(err) = set_autostart(handle, true) {
+                if let Err(err) = set_autostart(true) {
                     log::warn!("{err}");
                 }
             }

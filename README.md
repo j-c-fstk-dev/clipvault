@@ -177,21 +177,19 @@ clipvault/
 │   └── types/               # Shared types
 ├── src-tauri/               # Rust backend (Tauri 2)
 │   ├── src/
-│   │   ├── capture.rs       # X11 clipboard watcher (XFixes, INCR)
-│   │   ├── serve.rs         # Copying items back (selection owner, INCR)
+│   │   ├── platform/        # Everything OS-specific, same names per OS
+│   │   │   ├── linux/       # X11 clipboard, GIO open-with, inotify, XDG autostart
+│   │   │   └── macos/       # Being ported (docs/macos-port.md)
 │   │   ├── desktop.rs       # Tray, global shortcut, notifications
-│   │   ├── autostart.rs     # ~/.config/autostart entry
 │   │   ├── backup.rs        # .zip export / import
 │   │   ├── store.rs         # SQLite history, images, file snapshots
-│   │   ├── open.rs          # "Open with": content types and apps (GIO)
-│   │   ├── track.rs         # Watches folders of copied files (inotify)
 │   │   ├── locate.rs        # Finds moved files by inode, name and size
 │   │   ├── model.rs         # Item types and parsing helpers
 │   │   ├── settings.rs      # settings.json
 │   │   ├── i18n.rs          # Tray and notification texts (en / pt)
 │   │   ├── commands.rs      # Commands called by the UI
 │   │   └── lib.rs           # App setup
-│   ├── tests/               # X11 capture / paste integration tests
+│   ├── tests/               # X11 capture / paste integration tests (Linux)
 │   ├── capabilities/        # Window permissions
 │   ├── icons/               # App icons
 │   └── tauri.conf.json      # App and bundle config
@@ -216,6 +214,7 @@ clipvault/
 - [x] **0.1.1:** open with, follow moved files, background snapshots, image files as images
 - [x] **0.2.0:** macOS-inspired redesign
 - [x] **0.2.1:** smooth scrolling in dialogs, English and Portuguese
+- [ ] **macOS** — in progress, see [docs/macos-port.md](docs/macos-port.md)
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
 
 ## 🤝 Contributing

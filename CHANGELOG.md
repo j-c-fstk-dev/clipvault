@@ -6,6 +6,12 @@ All notable changes to ClipVault are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Groundwork for macOS: code that depends on the operating system moved to
+  `src-tauri/src/platform/` (Linux behavior is unchanged), CI also builds and
+  tests on macOS, and `docs/macos-port.md` describes the port
+
 ## [0.2.1] - 2026-10-21
 
 ### Fixed
