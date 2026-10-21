@@ -1,6 +1,6 @@
 [package]
 name = "clipvault"
-version = "0.2.0"
+version = "0.2.1"
 description = "Clipboard manager for Linux with full history, categories and backup"
 authors = ["Jorge Cristo <dev.jorge.c@gmail.com>"]
 license = "AGPL-3.0-only"

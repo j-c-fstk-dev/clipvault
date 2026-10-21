@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Clipboard } from 'lucide-react';
 import { ClipboardItem, ViewMode, Settings } from '../types';
 import { errorMessage, hasBackend, hideWindow, openFile, openFileWith } from '../lib/backend';
@@ -203,15 +204,17 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
-  const toastView = toast && (
+  // In <body> and absolute, not fixed: see Overlay in ./ui.
+  const toastView = toast && createPortal(
     <div
       role="status"
-      className={`glass fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] px-4 h-10 inline-flex items-center rounded-full text-small font-medium ${
+      className={`glass absolute bottom-6 left-1/2 -translate-x-1/2 z-[70] px-4 h-10 inline-flex items-center rounded-full text-small font-medium ${
         toast.error ? 'text-danger' : 'text-ink'
       }`}
     >
       {toast.message}
-    </div>
+    </div>,
+    document.body
   );
 
   if (items.length === 0) {

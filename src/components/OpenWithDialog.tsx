@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AppWindow, X } from 'lucide-react';
 import { AppChoice } from '../types';
-import { IconButton } from './ui';
+import { IconButton, Overlay } from './ui';
 
 interface OpenWithDialogProps {
   /** File being opened. */
@@ -42,7 +42,7 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
   }, [onClose, onOpen, selected]);
 
   return (
-    <div className="overlay fixed inset-0 z-[60] flex items-center justify-center p-6" onClick={onClose}>
+    <Overlay onClose={onClose} z="z-[60]">
       <div
         role="dialog"
         aria-modal="true"
@@ -120,7 +120,7 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 };
 

@@ -68,6 +68,7 @@
 
   body {
     margin: 0;
+    overflow: hidden;
     background: var(--canvas);
     color: var(--ink);
     font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
@@ -166,11 +167,10 @@
   }
 }
 
-/* Sheets open with a short scale-in, answering the click that opened them. */
+/* Sheets fade in, answering the click that opened them. Opacity only: no transform layers. */
 @keyframes sheet-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.985);
   }
 }
 @keyframes fade-in {

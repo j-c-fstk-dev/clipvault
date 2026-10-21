@@ -5,7 +5,7 @@ import { categoryInfo } from '../lib/categories';
 import { dateTimeLabel, formatSize, hostOf } from '../lib/format';
 import FileSummary from './FileSummary';
 import { Tags } from './ItemParts';
-import { IconButton } from './ui';
+import { IconButton, Overlay } from './ui';
 
 interface ItemModalProps {
   item: ClipboardItem;
@@ -40,7 +40,7 @@ const ItemModal: React.FC<ItemModalProps> = ({
   ].filter(Boolean);
 
   return (
-    <div className="overlay fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}>
+    <Overlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -112,7 +112,7 @@ const ItemModal: React.FC<ItemModalProps> = ({
           />
         </footer>
       </div>
-    </div>
+    </Overlay>
   );
 };
 

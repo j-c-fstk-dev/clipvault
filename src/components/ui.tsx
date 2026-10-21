@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
@@ -132,3 +133,24 @@ export const Kbd: React.FC<{ keys: string }> = ({ keys }) => (
     ))}
   </span>
 );
+
+interface OverlayProps {
+  onClose: () => void;
+  /** Stacking order among overlays. */
+  z?: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Dimmed layer for dialogs, rendered at the end of <body>. It is absolutely
+ * positioned (the page itself never scrolls) rather than fixed: WebKitGTK
+ * composites fixed elements, and scrolling inside a composited layer shows
+ * noise on some older integrated GPUs.
+ */
+export const Overlay: React.FC<OverlayProps> = ({ onClose, z = 'z-50', children }) =>
+  createPortal(
+    <div className={`overlay absolute inset-0 ${z} flex items-center justify-center p-6`} onClick={onClose}>
+      {children}
+    </div>,
+    document.body
+  );

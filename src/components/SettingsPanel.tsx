@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Moon, Sun, Download, Upload } from 'lucide-react';
-import { IconButton, Segmented, Switch } from './ui';
+import { IconButton, Segmented, Switch, Overlay } from './ui';
 import { Settings, Theme, AccentColor } from '../types';
 import { eventToAccelerator } from '../lib/shortcuts';
 import * as backend from '../lib/backend';
@@ -254,7 +254,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   );
 
   return (
-    <div className="overlay fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}>
+    <Overlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -390,7 +390,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           </Section>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 };
 
