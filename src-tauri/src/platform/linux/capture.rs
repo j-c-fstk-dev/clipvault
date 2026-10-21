@@ -3,7 +3,7 @@
 //! Listens for XFixes selection-owner changes on `CLIPBOARD` (no polling),
 //! asks the owner for its `TARGETS`, picks the richest format we understand
 //! and reads it, including the INCR protocol used for large transfers.
-//! The same connection serves our own clipboard offers (see [`crate::serve`]).
+//! The same connection serves our own clipboard offers (see [`super::serve`]).
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -21,8 +21,8 @@ use x11rb::protocol::Event;
 use x11rb::rust_connection::RustConnection;
 use x11rb::{CURRENT_TIME, NONE};
 
+use super::serve::{ClipboardHandle, Server};
 use crate::model::{decode_html, decode_latin1, parse_uri_list, Captured};
-use crate::serve::{ClipboardHandle, Server};
 
 pub(crate) type BoxError = Box<dyn Error + Send + Sync>;
 pub(crate) type Result<T> = std::result::Result<T, BoxError>;

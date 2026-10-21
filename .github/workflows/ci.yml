@@ -58,3 +58,37 @@ jobs:
       - name: cargo test
         working-directory: src-tauri
         run: xvfb-run -a cargo test
+
+  macos:
+    name: macOS build and test
+    # Apple Silicon. The port is in progress (docs/macos-port.md): this keeps
+    # the macOS side compiling and its tests passing on every change.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Produces dist/, which tauri::generate_context! embeds at compile time.
+      - run: npm run build
+
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test

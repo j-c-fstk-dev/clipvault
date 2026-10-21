@@ -45,7 +45,12 @@ pub fn default_roots() -> Vec<PathBuf> {
         roots.push(PathBuf::from(home));
     }
     let user = env::var("USER").unwrap_or_default();
-    for dir in ["/media", "/mnt", &format!("/run/media/{user}")] {
+    let mounts = if cfg!(target_os = "macos") {
+        vec!["/Volumes".to_string()]
+    } else {
+        vec!["/media".into(), "/mnt".into(), format!("/run/media/{user}")]
+    };
+    for dir in &mounts {
         let dir = PathBuf::from(dir);
         if dir.is_dir() {
             roots.push(dir);

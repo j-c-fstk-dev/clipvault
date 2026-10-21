@@ -9,9 +9,8 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::backup::{self, ExportStats};
 use crate::locate;
-use crate::model::{image_mime, Category, FileEntry, Item, ItemKind, SnapshotStatus};
-use crate::open::{self as opener, AppChoice};
-use crate::serve::Outgoing;
+use crate::model::{image_mime, Category, FileEntry, Item, ItemKind, Outgoing, SnapshotStatus};
+use crate::platform::open::{self as opener, AppChoice};
 use crate::settings::Settings;
 use crate::store::{Counts, ImportStats, Page, Query};
 use crate::AppState;
