@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Theme, AccentColor } from '../types';
+import { lighten, rotateHue, withAlpha } from '../lib/color';
 
 export const useTheme = () => {
   const [theme, setTheme] = useState<Theme>('dark');
@@ -25,10 +26,22 @@ export const useTheme = () => {
     }
   }, []);
 
-  // Native controls (select popups, scrollbars) follow the app theme.
+  // Theme tokens live in index.css; the accent-derived ones are set here.
   useEffect(() => {
-    document.documentElement.style.colorScheme = theme;
-  }, [theme]);
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    const second = rotateHue(accentColor, 50);
+    const glow = theme === 'dark' ? 0.42 : 0.5;
+    const vars: Record<string, string> = {
+      '--accent': accentColor,
+      '--accent-light': lighten(accentColor, 0.22),
+      '--accent-soft': withAlpha(accentColor, 0.18),
+      '--accent-faint': withAlpha(accentColor, 0.09),
+      '--accent-glow': withAlpha(accentColor, glow),
+      '--accent-2-glow': withAlpha(second, glow * 0.8),
+    };
+    for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
+  }, [theme, accentColor]);
 
   const updateTheme = (newTheme: Theme) => {
     setTheme(newTheme);

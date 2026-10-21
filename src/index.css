@@ -1,3 +1,205 @@
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Design tokens. `--accent`, `--accent-soft`, `--accent-faint` and
+ * `--accent-2` are set from the chosen accent color by useTheme.
+ *
+ * Glass is used only on navigation (sidebar, toolbar controls, floating
+ * action bars, toasts), never behind content. It is drawn with gradients and
+ * highlights instead of backdrop-filter, which renders garbled on older
+ * integrated GPUs under WebKitGTK.
+ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --window: #1a1b20;
+  --canvas: #1a1b20;
+  --surface: #222329;
+  --surface-2: #2b2c33;
+  --line: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --ink: #ececef;
+  --muted: #9b9ca5;
+  --faint: #6c6d76;
+  --danger: #f2555a;
+  --star: #f5b83d;
+  --overlay: rgba(6, 7, 10, 0.55);
+
+  --glass-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.03) 100%);
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.13), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  --glass-drop: 0 18px 40px -22px rgba(0, 0, 0, 0.75);
+  --pill-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.025) 100%);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --window: #eceef2;
+  --canvas: #eceef2;
+  --surface: #ffffff;
+  --surface-2: #eceef2;
+  --line: rgba(22, 27, 45, 0.085);
+  --line-strong: rgba(22, 27, 45, 0.14);
+  --ink: #1c1c1f;
+  --muted: #62636b;
+  --faint: #9a9ba3;
+  --danger: #d92d33;
+  --star: #e09b0f;
+  --overlay: rgba(28, 32, 44, 0.35);
+
+  --glass-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.5) 100%);
+  --glass-edge: rgba(255, 255, 255, 0.9);
+  --glass-shine: inset 0 1px 0 #ffffff, 0 0 0 1px rgba(22, 27, 45, 0.06);
+  --glass-drop: 0 18px 40px -24px rgba(30, 40, 80, 0.4);
+  --pill-fill: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.72) 100%);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'ss01';
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* The window behind the floating sidebar: accent light pooled on the left. */
+  .backdrop {
+    background:
+      radial-gradient(260px 300px at 40px 60px, var(--accent-glow), transparent 70%),
+      radial-gradient(240px 320px at 200px 100%, var(--accent-2-glow), transparent 70%),
+      var(--window);
+  }
+
+  .glass {
+    background: var(--glass-fill);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--glass-shine), var(--glass-drop);
+  }
+
+  /* Toolbar controls: glass without the large drop shadow. */
+  .pill {
+    background: var(--pill-fill);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--glass-shine);
+  }
+
+  /* The selected item in glass navigation: a lit lens of accent color. */
+  .lens {
+    background: linear-gradient(180deg, var(--accent-light) 0%, var(--accent) 100%);
+    color: #fff;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+      0 6px 16px -8px var(--accent);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+
+  .field {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .field::placeholder {
+    color: var(--faint);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .hover-tint:hover {
+    background: var(--line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Sheets open with a short scale-in, answering the click that opened them. */
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.sheet-in {
+  animation: sheet-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.overlay {
+  background: var(--overlay);
+  animation: fade-in 120ms ease-out;
+}
+.sheet {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--glass-shine), 0 30px 70px -24px rgba(0, 0, 0, 0.55);
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Controls floating over content stay opaque, so text never shows through. */
+.float-bar {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--glass-shine), 0 6px 16px -8px rgba(0, 0, 0, 0.35);
+}
