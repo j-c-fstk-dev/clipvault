@@ -16,6 +16,13 @@ All notable changes to ClipVault are documented here. The format follows
 
 ### Changed
 
+- The default show/hide shortcut is now `Ctrl+Super+V` (`Ctrl+Cmd+V` on
+  macOS), because `Ctrl+Shift+V` is paste in terminals and paste as plain
+  text in many apps. Settings that still have `Ctrl+Shift+V` are moved to
+  the new default once; it can be chosen again in Settings
+
+### Changed
+
 - Groundwork for macOS: code that depends on the operating system moved to
   `src-tauri/src/platform/` (Linux behavior is unchanged), CI also builds and
   tests on macOS, and `docs/macos-port.md` describes the port

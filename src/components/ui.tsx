@@ -128,7 +128,7 @@ export const Switch: React.FC<SwitchProps> = ({ checked, onChange, label }) => (
   </button>
 );
 
-/** A key or key combination, e.g. Ctrl+Shift+V. */
+/** A key or key combination, e.g. Ctrl+Super+V. */
 export const Kbd: React.FC<{ keys: string }> = ({ keys }) => (
   <span className="inline-flex items-center gap-0.5 align-middle">
     {keys.split('+').map(key => (

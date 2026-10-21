@@ -187,5 +187,7 @@ what happened and, if something failed, a screenshot.
 9. **Copy back:** click an older text item, paste anywhere → that text is
    pasted, and the item moves to the top without being duplicated.
 10. **Pause:** click *Pause recording*, copy something → not recorded.
-11. **Start on login:** turn it on in Settings, log out and back in →
+11. **Shortcut:** with another app in front, press **Ctrl+Cmd+V** →
+    ClipVault appears; press it again → it hides.
+12. **Start on login:** turn it on in Settings, log out and back in →
     ClipVault is running (window hidden).

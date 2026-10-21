@@ -137,7 +137,7 @@ pub fn build_tray(
     Ok(Tray { show, pause, quit })
 }
 
-/// Parses an accelerator such as `Ctrl+Shift+V`.
+/// Parses an accelerator such as `Ctrl+Super+V`.
 pub fn parse_shortcut(accelerator: &str) -> Result<Shortcut, String> {
     accelerator
         .parse::<Shortcut>()
@@ -218,6 +218,7 @@ mod tests {
     #[test]
     fn parses_default_and_recorded_shortcuts() {
         for accelerator in [
+            "Ctrl+Super+V",
             "Ctrl+Shift+V",
             "Super+V",
             "Alt+Space",
