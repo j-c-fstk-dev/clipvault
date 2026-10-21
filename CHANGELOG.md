@@ -6,6 +6,25 @@ All notable changes to ClipVault are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-21
+
+### Fixed
+
+- Scrolling long text in the preview (and settings) no longer shows noise on
+  older integrated graphics: dialogs are no longer fixed-position layers,
+  which WebKitGTK composites on the GPU
+
+### Added
+
+- English and Portuguese: ClipVault follows the desktop's language, or pick
+  one in Settings → Appearance → Language. The tray menu and notifications
+  follow too
+- README in Portuguese (`README.pt-BR.md`), linked from the English one
+
+### Changed
+
+- README: screenshots, the new features, updating and troubleshooting
+
 ## [0.2.0] - 2026-10-20
 
 ### Changed
@@ -85,7 +104,8 @@ Runs on X11 desktops (XFCE, MATE, Cinnamon, KDE on X11…).
 - Content marked secret by password managers is never stored; capture can
   be paused
 
-[Unreleased]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/j-c-fstk-dev/clipvault/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/j-c-fstk-dev/clipvault/releases/tag/v0.1.0

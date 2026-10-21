@@ -1,23 +1,24 @@
 import React from 'react';
 import { FileInfo } from '../types';
 import { fileIcon } from '../lib/fileTypes';
+import { useI18n, type Messages } from '../i18n';
 
 /** Badge for a file: where its contents can still be found. */
-const status = (file: FileInfo): { label: string; tone: string } => {
+const status = (file: FileInfo, t: Messages): { label: string; tone: string } => {
   if (!file.exists) {
     return file.status === 'stored'
-      ? { label: 'Saved copy only', tone: 'bg-accent-faint text-accent' }
-      : { label: 'Not found', tone: 'bg-line text-danger' };
+      ? { label: t.files.savedCopyOnly, tone: 'bg-accent-faint text-accent' }
+      : { label: t.files.notFound, tone: 'bg-line text-danger' };
   }
   switch (file.status) {
     case 'stored':
-      return { label: 'Saved copy', tone: 'bg-accent-faint text-accent' };
+      return { label: t.files.savedCopy, tone: 'bg-accent-faint text-accent' };
     case 'pending':
-      return { label: 'Saving…', tone: 'bg-line text-muted' };
+      return { label: t.files.saving, tone: 'bg-line text-muted' };
     case 'too_large':
-      return { label: 'Path only', tone: 'bg-line text-muted' };
+      return { label: t.files.pathOnly, tone: 'bg-line text-muted' };
     default:
-      return { label: 'Missing', tone: 'bg-line text-danger' };
+      return { label: t.files.missing, tone: 'bg-line text-danger' };
   }
 };
 
@@ -31,6 +32,7 @@ interface FileSummaryProps {
 
 /** Copied files and folders with whether the vault kept a copy of each. */
 const FileSummary: React.FC<FileSummaryProps> = ({ files, limit, onOpen }) => {
+  const { t } = useI18n();
   const shown = limit === undefined ? files : files.slice(0, limit);
   const hidden = files.length - shown.length;
 
@@ -38,7 +40,7 @@ const FileSummary: React.FC<FileSummaryProps> = ({ files, limit, onOpen }) => {
     <ul className="flex flex-col gap-1.5 text-small min-w-0">
       {shown.map((file, position) => {
         const Icon = fileIcon(file.name, file.isDir);
-        const badge = status(file);
+        const badge = status(file, t);
         return (
           <li key={file.path} className="min-w-0" title={file.path}>
             <div className="flex items-center gap-2 min-w-0">
@@ -50,7 +52,7 @@ const FileSummary: React.FC<FileSummaryProps> = ({ files, limit, onOpen }) => {
                     e.stopPropagation();
                     onOpen(position);
                   }}
-                  title={`Open ${file.name}`}
+                  title={t.files.open(file.name)}
                   className="truncate text-left font-medium hover:text-accent hover:underline underline-offset-2"
                 >
                   {file.name}
@@ -68,7 +70,7 @@ const FileSummary: React.FC<FileSummaryProps> = ({ files, limit, onOpen }) => {
           </li>
         );
       })}
-      {hidden > 0 && <li className="text-caption text-faint">{hidden} more</li>}
+      {hidden > 0 && <li className="text-caption text-faint">{t.files.more(hidden)}</li>}
     </ul>
   );
 };

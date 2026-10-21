@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
@@ -48,17 +49,25 @@ interface SegmentedProps<T extends string> {
 
 /** Glass segmented control; the selected segment sits under a sliding lens. */
 export function Segmented<T extends string>({ label, value, options, onChange, iconOnly }: SegmentedProps<T>) {
+  const group = useRef<HTMLDivElement>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const [lens, setLens] = useState<{ left: number; width: number } | null>(null);
   const index = Math.max(0, options.findIndex(o => o.value === value));
 
+  // Re-measured whenever the segments change size (labels, language, fonts).
   useLayoutEffect(() => {
-    const node = refs.current[index];
-    if (node) setLens({ left: node.offsetLeft, width: node.offsetWidth });
+    const measure = () => {
+      const node = refs.current[index];
+      if (node) setLens({ left: node.offsetLeft, width: node.offsetWidth });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (group.current) observer.observe(group.current);
+    return () => observer.disconnect();
   }, [index, options.length]);
 
   return (
-    <div role="radiogroup" aria-label={label} className="pill relative inline-flex p-[3px] rounded-[10px]">
+    <div ref={group} role="radiogroup" aria-label={label} className="pill relative inline-flex p-[3px] rounded-[10px]">
       {lens && (
         <span
           aria-hidden
@@ -132,3 +141,24 @@ export const Kbd: React.FC<{ keys: string }> = ({ keys }) => (
     ))}
   </span>
 );
+
+interface OverlayProps {
+  onClose: () => void;
+  /** Stacking order among overlays. */
+  z?: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Dimmed layer for dialogs, rendered at the end of <body>. It is absolutely
+ * positioned (the page itself never scrolls) rather than fixed: WebKitGTK
+ * composites fixed elements, and scrolling inside a composited layer shows
+ * noise on some older integrated GPUs.
+ */
+export const Overlay: React.FC<OverlayProps> = ({ onClose, z = 'z-50', children }) =>
+  createPortal(
+    <div className={`overlay absolute inset-0 ${z} flex items-center justify-center p-6`} onClick={onClose}>
+      {children}
+    </div>,
+    document.body
+  );

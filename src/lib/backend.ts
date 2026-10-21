@@ -108,6 +108,9 @@ export const getCaptureStatus = () => invoke<CaptureStatus>('get_capture_status'
 
 export const getSettings = () => invoke<Settings>('get_settings');
 
+/** The desktop's language, for the "auto" language setting. */
+export const systemLanguage = () => invoke<'en' | 'pt'>('system_language');
+
 export const updateSettings = (settings: Settings) =>
   invoke<Settings>('update_settings', { settings });
 

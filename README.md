@@ -7,6 +7,8 @@
 
   *A clipboard manager for Linux that remembers everything you copy — text, links, images, files and folders.*
 
+  **English** · [Português](README.pt-BR.md)
+
   [![CI](https://github.com/j-c-fstk-dev/clipvault/actions/workflows/ci.yml/badge.svg)](https://github.com/j-c-fstk-dev/clipvault/actions/workflows/ci.yml)
   [![Release](https://img.shields.io/github/v/release/j-c-fstk-dev/clipvault?include_prereleases)](https://github.com/j-c-fstk-dev/clipvault/releases)
   [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
@@ -18,15 +20,27 @@
 
 ---
 
-> **Status:** early development — the first release is 0.1.0. See the
-> [Roadmap](#-roadmap) for what comes next.
+<p align="center">
+  <img src="docs/screenshots/dark.png" alt="ClipVault in the dark theme: a floating glass sidebar with categories and a grid of copied text, links, images and files grouped by day" width="820">
+</p>
+
+> **Status:** actively developed — the current release is 0.2.1. See the
+> [Changelog](CHANGELOG.md) and the [Roadmap](#-roadmap).
 
 ## ✨ Features
 
 - **Real-time capture** on X11 — event driven, no polling — of text, HTML,
   images and files/folders copied in your file manager
 - **File snapshots** — copied files are also saved in the vault (up to 25 MB
-  per copy by default), so they survive being moved or deleted
+  per copy by default), in the background at low disk priority so they never
+  slow down your own copy; bigger copies keep just their path
+- **Follows cut and moved files** — for 30 minutes after a copy, ClipVault
+  notices when a file leaves its folder and finds where it went (renamed,
+  pasted elsewhere, trashed or moved to a drive); files moved later are looked
+  up when you open or copy them again
+- **Open with** — click a copied file to open it; an Android-style chooser
+  lists the system default first, then the other installed apps, "Just once"
+  or "Always"
 - **Persistent history** in SQLite; copying something again moves it to the
   top instead of duplicating it; oldest items are pruned past the limit
   (favorites are always kept)
@@ -43,13 +57,24 @@
 - **Backups** — export the whole history (images and saved file copies
   included) to a `.zip` and import it on another machine; importing merges,
   it never replaces
-- **Category tabs** — text, links, images, files and folders, plus an "All" view
-- **Grid and list views**, sorting by date or name, instant search over
-  content, file paths and tags, smooth scrolling through large histories
+- **Categories** — text, links, images (image files from the file manager
+  included, with thumbnails), files and folders, plus "All items"
+- **Grouped by day** (Today, Yesterday, …), in a grid that fits images and
+  long text without gaps, or a compact list; sort by date or name; instant
+  search over content, file paths and tags
 - **Favorites and custom tags** to organize what matters
-- **Light and dark themes** with 12 accent colors
-- **Full-screen preview** with metadata and quick actions
-- **Native and lightweight** — Rust backend with the system WebKitGTK, ~2 MB `.deb`
+- **A macOS-inspired look** — floating glass sidebar and toolbar, light and
+  dark themes, 12 accent colors, Geist type. The glass is drawn without blur,
+  so it stays sharp on older integrated graphics
+- **Preview** with metadata and quick actions: copy, favorite, tag, delete
+- **English and Portuguese** — follows your desktop's language, or pick one in
+  Settings (the tray menu and notifications follow too)
+- **Native and lightweight** — Rust backend with the system WebKitGTK, small `.deb`
+
+<p align="center">
+  <img src="docs/screenshots/light.png" alt="ClipVault in the light theme" width="49%">
+  <img src="docs/screenshots/settings.png" alt="ClipVault settings, grouped like System Settings" width="49%">
+</p>
 
 ### Keyboard
 
@@ -57,7 +82,7 @@
 |---|---|
 | `Ctrl+Shift+V` | Show / hide ClipVault from anywhere |
 | `↑` `↓` `←` `→` | Select an item |
-| `Enter` | Open the selected item |
+| `Enter` | Open the selected item's preview |
 | `Ctrl+C` | Copy the selected item and hide ClipVault |
 | `Delete` | Delete the selected item |
 | `Esc` | Close the preview, or hide ClipVault |
@@ -91,6 +116,19 @@ sha256sum -c SHA256SUMS --ignore-missing
 
 Currently targeting **X11** desktops (XFCE, MATE, Cinnamon, KDE on X11…).
 Wayland support is on the roadmap.
+
+### Updating
+
+Quit ClipVault from the tray menu, then install the new `.deb` the same way;
+it upgrades in place and keeps your history and settings. For the AppImage,
+replace the old file with the new one.
+
+### Troubleshooting
+
+- **Text looks noisy or garbled** (common on older integrated graphics):
+  turn off *Settings → Appearance → Hardware acceleration* and restart
+  ClipVault.
+- **Nothing is recorded under Wayland:** only X11 apps are captured for now.
 
 ## 🛠️ Development
 
@@ -131,9 +169,11 @@ Set `RUST_LOG=clipvault_lib=debug` for verbose backend logs.
 ```
 clipvault/
 ├── src/                     # React + TypeScript UI
-│   ├── components/          # Header, Sidebar, views, modal, settings
+│   ├── components/          # Sidebar, toolbar, cards, preview, settings, ui primitives
 │   ├── hooks/               # useClipboard, useSettings, useTheme
-│   ├── lib/backend.ts       # Typed calls to the Rust commands
+│   ├── i18n/                # English and Portuguese texts
+│   ├── lib/                 # Backend calls, formatting, categories, colors
+│   ├── index.css            # Design tokens (light / dark) and glass styles
 │   └── types/               # Shared types
 ├── src-tauri/               # Rust backend (Tauri 2)
 │   ├── src/
@@ -143,8 +183,12 @@ clipvault/
 │   │   ├── autostart.rs     # ~/.config/autostart entry
 │   │   ├── backup.rs        # .zip export / import
 │   │   ├── store.rs         # SQLite history, images, file snapshots
+│   │   ├── open.rs          # "Open with": content types and apps (GIO)
+│   │   ├── track.rs         # Watches folders of copied files (inotify)
+│   │   ├── locate.rs        # Finds moved files by inode, name and size
 │   │   ├── model.rs         # Item types and parsing helpers
 │   │   ├── settings.rs      # settings.json
+│   │   ├── i18n.rs          # Tray and notification texts (en / pt)
 │   │   ├── commands.rs      # Commands called by the UI
 │   │   └── lib.rs           # App setup
 │   ├── tests/               # X11 capture / paste integration tests
@@ -158,7 +202,7 @@ clipvault/
 ### Tech stack
 
 - **Backend:** Rust + [Tauri 2](https://v2.tauri.app/)
-- **UI:** React 18, TypeScript, Tailwind CSS, Lucide icons, Vite
+- **UI:** React 18, TypeScript, Tailwind CSS, Lucide icons, Geist fonts, Vite
 - **Packaging:** Tauri bundler (`.deb`, `.AppImage`)
 
 ## 📋 Roadmap
@@ -169,6 +213,9 @@ clipvault/
 - [x] **Stage 4 — System:** tray, global shortcut, autostart, notifications
 - [x] **Stage 5 — Backup:** `.zip` export / import with merge
 - [x] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
+- [x] **0.1.1:** open with, follow moved files, background snapshots, image files as images
+- [x] **0.2.0:** macOS-inspired redesign
+- [x] **0.2.1:** smooth scrolling in dialogs, English and Portuguese
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
 
 ## 🤝 Contributing

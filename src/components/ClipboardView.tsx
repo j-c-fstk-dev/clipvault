@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Clipboard } from 'lucide-react';
 import { ClipboardItem, ViewMode, Settings } from '../types';
 import { errorMessage, hasBackend, hideWindow, openFile, openFileWith } from '../lib/backend';
 import { matchesAccelerator } from '../lib/shortcuts';
 import { dayLabel } from '../lib/format';
 import { Kbd } from './ui';
+import { useI18n } from '../i18n';
 import { SEARCH_INPUT_ID } from './Header';
 import ClipboardItemCard from './ClipboardItemCard';
 import ClipboardItemList from './ClipboardItemList';
@@ -58,6 +60,8 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
   focusToken,
 }) => {
   // Track the open item by id so it reflects updates (favorite, tags).
+  const i18n = useI18n();
+  const { t } = i18n;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
   const [cursor, setCursor] = useState(0);
@@ -95,13 +99,13 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
     const now = new Date();
     const result: { label: string | null; items: ClipboardItem[] }[] = [];
     for (const item of items) {
-      const label = dayLabel(item.timestamp, now);
+      const label = dayLabel(item.timestamp, i18n, now);
       const last = result[result.length - 1];
       if (last?.label === label) last.items.push(item);
       else result.push({ label, items: [item] });
     }
     return result;
-  }, [items, groupByDay]);
+  }, [items, groupByDay, i18n]);
 
   useEffect(() => {
     if (!cursorItem) return;
@@ -131,10 +135,10 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
   const handleCopy = (id: string, fromKeyboard = false) => {
     onCopyItem(id).then(
       () => {
-        setToast({ message: 'Copied to clipboard', error: false });
+        setToast({ message: t.history.copied, error: false });
         if (fromKeyboard && hideAfterKeyboardCopy) hideWindow().catch(() => {});
       },
-      error => setToast({ message: `Could not copy: ${errorMessage(error)}`, error: true })
+      error => setToast({ message: t.history.copyFailed(errorMessage(error)), error: true })
     );
   };
 
@@ -143,7 +147,7 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
       result => {
         if (result.kind === 'choose') setChooser({ itemId, position, choices: result });
       },
-      error => setToast({ message: `Could not open: ${errorMessage(error)}`, error: true })
+      error => setToast({ message: t.history.openFailed(errorMessage(error)), error: true })
     );
   };
 
@@ -152,8 +156,8 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
     const { itemId, position } = chooser;
     setChooser(null);
     openFileWith(itemId, position, appId, always).then(
-      () => always && setToast({ message: 'Will always open files of this type with this app', error: false }),
-      error => setToast({ message: `Could not open: ${errorMessage(error)}`, error: true })
+      () => always && setToast({ message: t.history.alwaysOpen, error: false }),
+      error => setToast({ message: t.history.openFailed(errorMessage(error)), error: true })
     );
   };
 
@@ -203,23 +207,25 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
-  const toastView = toast && (
+  // In <body> and absolute, not fixed: see Overlay in ./ui.
+  const toastView = toast && createPortal(
     <div
       role="status"
-      className={`glass fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] px-4 h-10 inline-flex items-center rounded-full text-small font-medium ${
+      className={`glass absolute bottom-6 left-1/2 -translate-x-1/2 z-[70] px-4 h-10 inline-flex items-center rounded-full text-small font-medium ${
         toast.error ? 'text-danger' : 'text-ink'
       }`}
     >
       {toast.message}
-    </div>
+    </div>,
+    document.body
   );
 
   if (items.length === 0) {
     const [title, hint] = !hasBackend
-      ? ['Desktop app required', 'Run `npm run tauri dev` to see your clipboard history.']
+      ? [t.history.desktopRequired, t.history.desktopRequiredHint]
       : isFiltered
-        ? ['Nothing matches', 'Try other words, another category, or turn off the favorites filter.']
-        : ['Nothing copied yet', 'Copy text, a link, an image or files and it shows up here.'];
+        ? [t.history.noMatches, t.history.noMatchesHint]
+        : [t.history.empty, t.history.emptyHint];
     return (
       <div className="h-full flex items-center justify-center px-6">
         <div className="max-w-sm text-center flex flex-col items-center">
@@ -230,7 +236,7 @@ const ClipboardView: React.FC<ClipboardViewProps> = ({
           <p className="mt-1 text-small text-muted">{hint}</p>
           {hasBackend && !isFiltered && shortcuts.toggleApp && (
             <p className="mt-4 text-small text-muted">
-              Bring ClipVault back from anywhere with <Kbd keys={shortcuts.toggleApp} />
+              {t.history.bringBack} <Kbd keys={shortcuts.toggleApp} />
             </p>
           )}
         </div>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Clipboard } from 'lucide-react';
 import { CaptureStatus, CategoryCounts } from '../types';
 import { CATEGORIES, CategoryFilter } from '../lib/categories';
+import { useI18n } from '../i18n';
 
 interface SidebarProps {
   activeCategory: CategoryFilter;
@@ -22,12 +23,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   captureStatus,
   onToggleCapture,
 }) => {
+  const { t } = useI18n();
   const unavailable = captureStatus !== null && !captureStatus.available;
   const [state, detail] = unavailable
-    ? ['Capture unavailable', captureStatus.error ?? 'The clipboard could not be read']
+    ? [t.sidebar.unavailable, captureStatus.error ?? t.sidebar.unavailableDetail]
     : captureEnabled
-      ? ['Recording', captureStatus?.wayland ? 'Only X11 apps are recorded under Wayland' : `${counts.all} items saved`]
-      : ['Paused', 'New copies are not saved'];
+      ? [t.sidebar.recording, captureStatus?.wayland ? t.sidebar.waylandNote : t.sidebar.itemsSaved(counts.all)]
+      : [t.sidebar.paused, t.sidebar.pausedDetail];
   const dot = unavailable ? 'bg-danger' : captureEnabled ? 'bg-[#34c759]' : 'bg-faint';
 
   return (
@@ -40,8 +42,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           <span className="text-[15px] font-semibold tracking-[-0.01em]">ClipVault</span>
         </div>
 
-        <nav aria-label="Categories" className="flex flex-col gap-0.5">
-          {CATEGORIES.map(({ id, label, icon: Icon }) => {
+        <nav aria-label={t.sidebar.categories} className="flex flex-col gap-0.5">
+          {CATEGORIES.map(({ id, icon: Icon }) => {
             const active = id === activeCategory;
             return (
               <button
@@ -54,7 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <Icon className={`w-[17px] h-[17px] ${active ? '' : 'text-muted'}`} />
-                <span className="flex-1 text-left">{label}</span>
+                <span className="flex-1 text-left">{t.categories[id]}</span>
                 <span className={`text-caption tabular-nums ${active ? 'text-white/80' : 'text-faint'}`}>
                   {counts[id]}
                 </span>
@@ -75,7 +77,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               onClick={onToggleCapture}
               className="pill mt-2.5 w-full h-7 rounded-lg text-small font-medium hover:text-accent transition-colors"
             >
-              {captureEnabled ? 'Pause recording' : 'Resume recording'}
+              {captureEnabled ? t.sidebar.pause : t.sidebar.resume}
             </button>
           )}
         </div>

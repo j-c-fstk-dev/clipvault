@@ -11,6 +11,7 @@ pub mod backup;
 pub mod capture;
 mod commands;
 mod desktop;
+pub mod i18n;
 mod locate;
 pub mod model;
 mod open;
@@ -111,6 +112,9 @@ pub(crate) fn apply_settings(app: &AppHandle, new: Settings) -> Result<Settings,
     state.paused.store(!new.capture_enabled, Ordering::Relaxed);
     if let Some(tray) = &state.tray {
         tray.set_paused(!new.capture_enabled);
+        if new.language != old.language {
+            tray.set_language(new.language.resolve());
+        }
     }
     state
         .store
@@ -215,7 +219,7 @@ fn start_capture(
                     tracker.track(inserted.item.id);
                 }
                 if settings.notifications && inserted.is_new {
-                    desktop::notify_capture(&app, &inserted.item);
+                    desktop::notify_capture(&app, &inserted.item, settings.language.resolve());
                 }
                 let payload = CapturedPayload {
                     item: inserted.item,
@@ -284,9 +288,14 @@ pub fn run() {
                 snapshots.clone(),
                 tracker,
             );
-            let tray = desktop::build_tray(handle, !current.capture_enabled, toggle_capture)
-                .map_err(|err| log::warn!("no tray icon: {err}"))
-                .ok();
+            let tray = desktop::build_tray(
+                handle,
+                !current.capture_enabled,
+                current.language.resolve(),
+                toggle_capture,
+            )
+            .map_err(|err| log::warn!("no tray icon: {err}"))
+            .ok();
             if let Err(err) =
                 desktop::register_toggle_shortcut(handle, &current.shortcuts.toggle_app)
             {
@@ -333,6 +342,7 @@ pub fn run() {
             commands::remove_tag,
             commands::get_capture_status,
             commands::get_settings,
+            commands::system_language,
             commands::update_settings,
             commands::hide_window,
             commands::open_file,

@@ -73,6 +73,9 @@ export type Theme = 'light' | 'dark';
 
 export type AccentColor = string;
 
+/** "auto" follows the system language. */
+export type Language = 'auto' | 'en' | 'pt';
+
 /** Mirrors `settings::Settings` in src-tauri. */
 export interface Settings {
   maxItems: number;
@@ -84,6 +87,7 @@ export interface Settings {
   hardwareAcceleration: boolean;
   /** App chosen with "Always", by content type. */
   openWith: Record<string, string>;
+  language: Language;
   shortcuts: {
     toggleApp: string;
     copySelected: string;

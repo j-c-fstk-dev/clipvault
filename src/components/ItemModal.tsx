@@ -1,11 +1,12 @@
 import React from 'react';
 import { Copy, Star, Trash2, X } from 'lucide-react';
 import { ClipboardItem } from '../types';
-import { categoryInfo } from '../lib/categories';
+import { categoryIcon } from '../lib/categories';
+import { useI18n } from '../i18n';
 import { dateTimeLabel, formatSize, hostOf } from '../lib/format';
 import FileSummary from './FileSummary';
 import { Tags } from './ItemParts';
-import { IconButton } from './ui';
+import { IconButton, Overlay } from './ui';
 
 interface ItemModalProps {
   item: ClipboardItem;
@@ -30,21 +31,23 @@ const ItemModal: React.FC<ItemModalProps> = ({
   onCopy,
   onOpenFile,
 }) => {
-  const { singular, icon: Icon } = categoryInfo(item.category);
+  const { t, locale } = useI18n();
+  const singular = t.singular[item.category];
+  const Icon = categoryIcon(item.category);
   const host = item.category === 'link' ? hostOf(item.content) : null;
   const details = [
-    dateTimeLabel(item.timestamp),
+    dateTimeLabel(item.timestamp, locale),
     item.size !== undefined ? formatSize(item.size) : null,
     item.width && item.height ? `${item.width} × ${item.height}` : null,
-    item.files.length > 1 ? `${item.files.length} files` : null,
+    item.files.length > 1 ? t.item.files(item.files.length) : null,
   ].filter(Boolean);
 
   return (
-    <div className="overlay fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}>
+    <Overlay onClose={onClose}>
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`${singular} preview`}
+        aria-label={t.item.preview(singular)}
         onClick={e => e.stopPropagation()}
         className="sheet sheet-in w-full max-w-3xl max-h-[86vh] rounded-2xl flex flex-col overflow-hidden"
       >
@@ -61,14 +64,14 @@ const ItemModal: React.FC<ItemModalProps> = ({
             </p>
           </div>
           <IconButton
-            label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            label={item.isFavorite ? t.item.removeFavorite : t.item.addFavorite}
             icon={Star}
             tone="star"
             onClick={() => onToggleFavorite(item.id)}
             className={item.isFavorite ? '!text-star [&>svg]:fill-current' : ''}
           />
           <IconButton
-            label="Delete"
+            label={t.item.delete}
             icon={Trash2}
             tone="danger"
             onClick={() => {
@@ -82,9 +85,9 @@ const ItemModal: React.FC<ItemModalProps> = ({
             className="lens h-8 px-3.5 ml-1 rounded-lg inline-flex items-center gap-1.5 text-small font-medium"
           >
             <Copy className="w-4 h-4" />
-            Copy
+            {t.item.copy}
           </button>
-          <IconButton label="Close" icon={X} onClick={onClose} />
+          <IconButton label={t.item.close} icon={X} onClick={onClose} />
         </header>
 
         <div className="flex-1 min-h-0 overflow-auto p-5 flex flex-col gap-4">
@@ -112,7 +115,7 @@ const ItemModal: React.FC<ItemModalProps> = ({
           />
         </footer>
       </div>
-    </div>
+    </Overlay>
   );
 };
 
