@@ -45,6 +45,10 @@ export const en = {
     pausedDetail: 'New copies are not saved',
     pause: 'Pause recording',
     resume: 'Resume recording',
+    needsAccess: 'Needs permission',
+    askDetail: 'macOS asks every time ClipVault reads a copy. Set ClipVault to Allow in Privacy & Security → Paste from Other Apps.',
+    deniedDetail: 'ClipVault is not allowed to read copies. Set it to Allow in Privacy & Security → Paste from Other Apps.',
+    openSettings: 'Open System Settings',
   },
 
   toolbar: {

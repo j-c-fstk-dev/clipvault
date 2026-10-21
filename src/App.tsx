@@ -44,10 +44,20 @@ function App() {
       .systemLanguage()
       .then(setSystemLanguage)
       .catch(error => console.error('Failed to read the system language:', error));
-    backend
-      .getCaptureStatus()
-      .then(setCaptureStatus)
-      .catch(error => console.error('Failed to read capture status:', error));
+  }, []);
+
+  // Read again whenever the window comes back, e.g. from System Settings
+  // after allowing clipboard access on macOS.
+  useEffect(() => {
+    if (!backend.hasBackend) return;
+    const refresh = () =>
+      backend
+        .getCaptureStatus()
+        .then(setCaptureStatus)
+        .catch(error => console.error('Failed to read capture status:', error));
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
   }, []);
 
   // Brought up from the tray or the global shortcut: ready to search.
@@ -72,6 +82,11 @@ function App() {
         captureEnabled={settings.captureEnabled}
         captureStatus={captureStatus}
         onToggleCapture={() => updateSettings({ captureEnabled: !settings.captureEnabled })}
+        onOpenAccessSettings={() =>
+          backend
+            .openClipboardSettings()
+            .catch(error => console.error('Failed to open System Settings:', error))
+        }
       />
 
       <div className="flex-1 min-w-0 flex flex-col">

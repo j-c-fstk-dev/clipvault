@@ -9,7 +9,9 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::backup::{self, ExportStats};
 use crate::locate;
-use crate::model::{image_mime, Category, FileEntry, Item, ItemKind, Outgoing, SnapshotStatus};
+use crate::model::{
+    image_mime, Category, ClipboardAccess, FileEntry, Item, ItemKind, Outgoing, SnapshotStatus,
+};
 use crate::platform::open::{self as opener, AppChoice};
 use crate::settings::Settings;
 use crate::store::{Counts, ImportStats, Page, Query};
@@ -27,6 +29,8 @@ pub struct CaptureStatus {
     pub error: Option<String>,
     /// Running in a Wayland session, where only X11 apps are captured.
     pub wayland: bool,
+    /// macOS: whether the user lets ClipVault read the clipboard.
+    pub access: Option<ClipboardAccess>,
 }
 
 #[tauri::command]
@@ -276,6 +280,12 @@ pub fn remove_tag(state: State<'_, AppState>, id: i64, tag: String) -> CmdResult
 #[tauri::command]
 pub fn get_capture_status(state: State<'_, AppState>) -> CaptureStatus {
     state.capture_status()
+}
+
+/// macOS: opens the System Settings page where clipboard access is allowed.
+#[tauri::command]
+pub fn open_clipboard_settings() -> CmdResult<()> {
+    crate::platform::capture::open_access_settings()
 }
 
 /// The desktop's language, used when Settings say "auto".

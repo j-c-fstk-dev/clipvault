@@ -79,6 +79,7 @@ impl AppState {
             paused: self.paused.load(Ordering::Relaxed),
             error: self.capture_error.clone(),
             wayland: is_wayland_session(),
+            access: platform::capture::access(),
         }
     }
 }
@@ -316,6 +317,7 @@ pub fn run() {
             commands::add_tag,
             commands::remove_tag,
             commands::get_capture_status,
+            commands::open_clipboard_settings,
             commands::get_settings,
             commands::system_language,
             commands::update_settings,

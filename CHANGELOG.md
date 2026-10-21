@@ -6,6 +6,14 @@ All notable changes to ClipVault are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- macOS: ClipVault records copies (text with formatting, links, images,
+  Finder files) and copies items back. Content marked by password managers
+  is skipped. When macOS asks for permission to read the clipboard, the
+  sidebar explains where to allow it and opens System Settings
+- The *macOS preview* workflow builds a test `.dmg` (Apple Silicon and Intel)
+
 ### Changed
 
 - Groundwork for macOS: code that depends on the operating system moved to

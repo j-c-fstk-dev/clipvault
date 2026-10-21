@@ -106,6 +106,9 @@ export const deleteItem = (id: string) => invoke('delete_item', { id: Number(id)
 
 export const getCaptureStatus = () => invoke<CaptureStatus>('get_capture_status');
 
+/** macOS: opens System Settings where clipboard access is allowed. */
+export const openClipboardSettings = () => invoke('open_clipboard_settings');
+
 export const getSettings = () => invoke<Settings>('get_settings');
 
 /** The desktop's language, for the "auto" language setting. */

@@ -310,6 +310,16 @@ pub fn file_name(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
+/// What the user allowed for background clipboard reads (macOS 15.4+).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClipboardAccess {
+    Allowed,
+    /// macOS alerts on every read.
+    Ask,
+    Denied,
+}
+
 /// Content to put on the clipboard.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outgoing {

@@ -1,9 +1,10 @@
 # Porting ClipVault to macOS
 
-Status: **in progress.** Stage 1 is done: the code that depends on the
-operating system lives in `src-tauri/src/platform/{linux,macos}`, and CI
-builds and tests the macOS side on every change. The macOS side does not
-capture the clipboard yet.
+Status: **in progress.** Stages 1 and 2 are done: the code that depends on
+the operating system lives in `src-tauri/src/platform/{linux,macos}`, CI
+builds and tests the macOS side on every change, and on macOS ClipVault
+records copies and copies items back. A test `.dmg` is built by the
+*macOS preview* workflow (see [Testing on a Mac](#testing-on-a-mac)).
 
 This page lists what has to be solved, what we know about each part
 (researched in October 2026), and the plan.
@@ -19,8 +20,8 @@ works on APFS.
 
 | `platform::` | Linux | macOS (planned) |
 |---|---|---|
-| `capture::Watcher` | X11 XFixes events | Poll `NSPasteboard.changeCount` (no change notification exists) |
-| `serve::ClipboardHandle` | X11 selection owner, INCR | `NSPasteboard` `clearContents` + `writeObjects` |
+| `capture::Watcher` | X11 XFixes events | Poll `NSPasteboard.changeCount` every 0.5 s (**done**) |
+| `serve::ClipboardHandle` | X11 selection owner, INCR | `NSPasteboard` `clearContents` + `setString` / `setData` / `writeObjects` (**done**) |
 | `open` | GIO content types and apps | `NSWorkspace` `URLsForApplicationsToOpenURL`, `UTType` |
 | `track::Tracker` | inotify on source folders + inode search | `NSURL` bookmark data, which resolves moves and renames on the same volume |
 | `autostart` | `~/.config/autostart/clipvault.desktop` | LaunchAgent in `~/Library/LaunchAgents` (**done**) |
@@ -47,9 +48,23 @@ works on APFS.
 - Maccy, the best-known open-source clipboard manager, still polls
   `changeCount` every 0.5 s and reads the items.
 
-**Plan:** check `accessBehavior` at startup; explain the prompt on first run
-and recommend *Always Allow*; when it is *Always Deny*, show how to change it
-instead of failing silently.
+- With *Ask*, the alert appears on **every** background read, and the alert
+  itself has no "always allow" button: the user must change it in System
+  Settings (or add the app there with **+** beforehand).
+
+**What ClipVault does (stage 2):** while no choice was made yet it reads
+normally (without the alert there is nothing to do; with it, the first alert
+makes ClipVault appear in System Settings). Under *Ask* or *Always Deny* it
+stops reading and only watches the change counter; the sidebar says
+*Needs permission*, explains where to allow it and has an *Open System
+Settings* button. Once allowed, it records what is on the clipboard at that
+moment and carries on. The status is read again whenever the window gets
+focus.
+
+**To verify on a Mac:** whether the alert appears at all on the tester's
+macOS version, and whether the button opens *Paste from Other Apps* directly
+(it uses `x-apple.systempreferences:com.apple.preference.security?Privacy_Pasteboard`;
+the anchor name is a guess, and an unknown anchor opens Privacy & Security).
 
 ### Reading the clipboard
 
@@ -118,10 +133,12 @@ volume break it, so keep the current inode and name+size search as fallback.
 
 1. **Platform layer** ✅ — Linux code under `platform/linux`, macOS
    placeholders, LaunchAgent autostart, CI on `macos-latest`.
-2. **Clipboard on macOS** — `changeCount` polling, reading all types,
-   password-manager markers, writing back (text + HTML, images, files),
-   `accessBehavior` handling and first-run explanation. First build for the
-   tester.
+2. **Clipboard on macOS** ✅ — `changeCount` polling; reading text + HTML,
+   images (PNG, JPEG, WebP, GIF, BMP as they are; TIFF converted to PNG) and
+   Finder files; skipping password-manager markers; writing back (text +
+   HTML, images as PNG, files as file URLs plus the picture of a single image
+   file); `accessBehavior` handling. First build for the tester. RTF is not
+   kept yet (the plain text and HTML are).
 3. **Native integration** — open-with list with app icons, bookmarks for
    moved files, menu-bar app (no Dock icon, template icon), native glass and
    overlay title bar, hide settings that only apply to Linux.
@@ -130,6 +147,45 @@ volume break it, so keep the current inode and name+size search as fallback.
 
 ## Testing on a Mac
 
-Each stage ends with a build for the tester and a checklist: copy text, a
-link, an image, several files in Finder; paste each back; check the privacy
-prompt; start on login; menu-bar icon in light and dark menu bars.
+### Getting the build
+
+1. In GitHub, open **Actions → macOS preview**, pick the latest green run
+   (or **Run workflow** to build one) and download **ClipVault-macOS**
+   at the bottom of the page. Unzip it to get the `.dmg`.
+2. Open the `.dmg` and drag ClipVault to Applications.
+3. The app is not notarized, so the first launch is blocked: open
+   **System Settings → Privacy & Security**, scroll down and click
+   **Open Anyway** next to the ClipVault message (or run
+   `xattr -cr /Applications/ClipVault.app` once in Terminal).
+
+The build runs on Apple Silicon and Intel Macs, macOS 13 or later. Until
+stage 3 ClipVault also shows a Dock icon.
+
+### Checklist (stage 2)
+
+Note the macOS version (Apple menu → About This Mac). For each item, note
+what happened and, if something failed, a screenshot.
+
+1. **Permission:** after launching, copy some text in another app. Does
+   macOS show a "Paste from Other Apps" alert? What does ClipVault's sidebar
+   say? If it says *Needs permission*, click **Open System Settings**: which
+   page opens? Set ClipVault to **Allow** and return to ClipVault: does the
+   sidebar go back to *Recording*?
+2. **Text:** copy a sentence in Notes or TextEdit → it appears in ClipVault.
+3. **Formatted text:** copy a paragraph with bold from Safari → appears;
+   click it in ClipVault, paste in TextEdit (rich text) → keeps the bold?
+4. **Link:** copy a URL from the Safari address bar → appears as a link.
+5. **Image:** right-click an image in Safari → Copy Image → appears with a
+   preview. Also a screenshot with **Cmd+Ctrl+Shift+4**.
+6. **Files:** select 2–3 files in Finder, **Cmd+C** → one item with the
+   files. Click it in ClipVault, then **Cmd+V** in another Finder folder →
+   the files are copied there.
+7. **Image file:** copy one `.png`/`.jpg` in Finder, click it in ClipVault,
+   paste in Messages or Notes → the picture is pasted.
+8. **Passwords:** copy a password from 1Password, Bitwarden, KeePassXC or
+   the Passwords app → it must **not** appear in ClipVault.
+9. **Copy back:** click an older text item, paste anywhere → that text is
+   pasted, and the item moves to the top without being duplicated.
+10. **Pause:** click *Pause recording*, copy something → not recorded.
+11. **Start on login:** turn it on in Settings, log out and back in →
+    ClipVault is running (window hidden).
