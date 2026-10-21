@@ -14,6 +14,13 @@ All notable changes to ClipVault are documented here. The format follows
   older integrated graphics: dialogs are no longer fixed-position layers,
   which WebKitGTK composites on the GPU
 
+### Added
+
+- English and Portuguese: ClipVault follows the desktop's language, or pick
+  one in Settings → Appearance → Language. The tray menu and notifications
+  follow too
+- README in Portuguese (`README.pt-BR.md`), linked from the English one
+
 ### Changed
 
 - README: screenshots, the new features, updating and troubleshooting

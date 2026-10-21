@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Star } from 'lucide-react';
 import { ClipboardItem } from '../types';
-import { categoryInfo } from '../lib/categories';
+import { categoryIcon } from '../lib/categories';
+import { useI18n } from '../i18n';
 import { dateTimeLabel, formatSize, hostOf, timeLabel } from '../lib/format';
 import FileSummary from './FileSummary';
 import { ItemActions, Tags } from './ItemParts';
@@ -31,6 +32,7 @@ export const ItemBody: React.FC<{ item: ClipboardItem; compact?: boolean; onOpen
   compact = false,
   onOpenFile,
 }) => {
+  const { t } = useI18n();
   if (item.files.length > 0) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -46,11 +48,11 @@ export const ItemBody: React.FC<{ item: ClipboardItem; compact?: boolean; onOpen
     return item.thumbnailUrl && !compact ? (
       <img
         src={item.thumbnailUrl}
-        alt={dimensions ? `Image, ${dimensions}` : 'Image'}
+        alt={dimensions ? t.item.imageSized(dimensions) : t.item.image}
         className="w-full max-h-48 object-cover rounded-[10px] bg-surface-2"
       />
     ) : (
-      <p className="text-body font-medium">{dimensions ? `Image, ${dimensions}` : 'Image'}</p>
+      <p className="text-body font-medium">{dimensions ? t.item.imageSized(dimensions) : t.item.image}</p>
     );
   }
   const host = item.category === 'link' ? hostOf(item.content) : null;
@@ -79,16 +81,18 @@ export const ItemBody: React.FC<{ item: ClipboardItem; compact?: boolean; onOpen
 
 /** When the item was copied, its size, and whether it is a favorite. */
 export const ItemMeta: React.FC<{ item: ClipboardItem; showTimeOnly?: boolean }> = ({ item, showTimeOnly }) => {
-  const { singular, icon: Icon } = categoryInfo(item.category);
+  const i18n = useI18n();
+  const Icon = categoryIcon(item.category);
+  const full = dateTimeLabel(item.timestamp, i18n.locale);
   return (
     <div className="flex items-center gap-1.5 text-caption text-muted min-w-0">
       <Icon aria-hidden className="w-3.5 h-3.5 shrink-0 text-faint" />
-      <span>{singular}</span>
-      <span className="text-faint" title={dateTimeLabel(item.timestamp)}>
-        {showTimeOnly ? timeLabel(item.timestamp) : dateTimeLabel(item.timestamp)}
+      <span>{i18n.t.singular[item.category]}</span>
+      <span className="text-faint" title={full}>
+        {showTimeOnly ? timeLabel(item.timestamp, i18n) : full}
       </span>
       {item.size !== undefined && <span className="text-faint">{formatSize(item.size)}</span>}
-      {item.isFavorite && <Star aria-label="Favorite" className="w-3.5 h-3.5 text-star fill-current" />}
+      {item.isFavorite && <Star aria-label={i18n.t.item.favorite} className="w-3.5 h-3.5 text-star fill-current" />}
     </div>
   );
 };

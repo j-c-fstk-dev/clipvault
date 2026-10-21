@@ -49,17 +49,25 @@ interface SegmentedProps<T extends string> {
 
 /** Glass segmented control; the selected segment sits under a sliding lens. */
 export function Segmented<T extends string>({ label, value, options, onChange, iconOnly }: SegmentedProps<T>) {
+  const group = useRef<HTMLDivElement>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const [lens, setLens] = useState<{ left: number; width: number } | null>(null);
   const index = Math.max(0, options.findIndex(o => o.value === value));
 
+  // Re-measured whenever the segments change size (labels, language, fonts).
   useLayoutEffect(() => {
-    const node = refs.current[index];
-    if (node) setLens({ left: node.offsetLeft, width: node.offsetWidth });
+    const measure = () => {
+      const node = refs.current[index];
+      if (node) setLens({ left: node.offsetLeft, width: node.offsetWidth });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (group.current) observer.observe(group.current);
+    return () => observer.disconnect();
   }, [index, options.length]);
 
   return (
-    <div role="radiogroup" aria-label={label} className="pill relative inline-flex p-[3px] rounded-[10px]">
+    <div ref={group} role="radiogroup" aria-label={label} className="pill relative inline-flex p-[3px] rounded-[10px]">
       {lens && (
         <span
           aria-hidden

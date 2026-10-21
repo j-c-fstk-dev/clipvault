@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::Language;
+
 /// Mirrors `Settings` in `src/types`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -31,6 +33,8 @@ pub struct Settings {
     /// type (e.g. `image/png` → `org.xfce.ristretto.desktop`). Only used by
     /// ClipVault; the system defaults are left alone.
     pub open_with: BTreeMap<String, String>,
+    /// Language of the window, tray menu and notifications.
+    pub language: Language,
 }
 
 impl Default for Settings {
@@ -45,6 +49,7 @@ impl Default for Settings {
             hardware_acceleration: true,
             shortcuts: Shortcuts::default(),
             open_with: BTreeMap::new(),
+            language: Language::Auto,
         }
     }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { categoryInfo } from '../lib/categories';
+import { categoryIcon } from '../lib/categories';
 import { fileIcon } from '../lib/fileTypes';
 import { ItemBody, ItemMeta, ItemViewProps } from './ClipboardItemCard';
 import { ItemActions, Tags } from './ItemParts';
@@ -19,7 +19,7 @@ const ClipboardItemList: React.FC<ItemViewProps> = ({
 }) => {
   const [tagging, setTagging] = useState(false);
   const [first] = item.files;
-  const Icon = first ? fileIcon(first.name, first.isDir) : categoryInfo(item.category).icon;
+  const Icon = first ? fileIcon(first.name, first.isDir) : categoryIcon(item.category);
   return (
     <article
       data-item-id={item.id}

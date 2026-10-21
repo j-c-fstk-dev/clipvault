@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Header, { SEARCH_INPUT_ID } from './components/Header';
 import Sidebar from './components/Sidebar';
 import ClipboardView from './components/ClipboardView';
 import SettingsPanel from './components/SettingsPanel';
 import { ViewMode, SortOption, CaptureStatus } from './types';
 import * as backend from './lib/backend';
-import { CategoryFilter, categoryInfo } from './lib/categories';
+import { CategoryFilter } from './lib/categories';
+import { I18nContext, resolveI18n } from './i18n';
 import { useClipboard } from './hooks/useClipboard';
 import { useSettings } from './hooks/useSettings';
 import { useTheme } from './hooks/useTheme';
@@ -22,6 +23,13 @@ function App() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [captureStatus, setCaptureStatus] = useState<CaptureStatus | null>(null);
   const [focusToken, setFocusToken] = useState(0);
+  const [systemLanguage, setSystemLanguage] = useState<'en' | 'pt'>();
+  const i18n = useMemo(() => resolveI18n(settings.language, systemLanguage), [settings.language, systemLanguage]);
+  const { t } = i18n;
+
+  useEffect(() => {
+    document.documentElement.lang = i18n.locale;
+  }, [i18n.locale]);
 
   const clipboard = useClipboard({
     search: searchQuery,
@@ -32,6 +40,10 @@ function App() {
 
   useEffect(() => {
     if (!backend.hasBackend) return;
+    backend
+      .systemLanguage()
+      .then(setSystemLanguage)
+      .catch(error => console.error('Failed to read the system language:', error));
     backend
       .getCaptureStatus()
       .then(setCaptureStatus)
@@ -51,6 +63,7 @@ function App() {
   }, []);
 
   return (
+    <I18nContext.Provider value={i18n}>
     <div className="backdrop h-full flex overflow-hidden">
       <Sidebar
         activeCategory={activeCategory}
@@ -63,7 +76,7 @@ function App() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <Header
-          title={categoryInfo(activeCategory).label}
+          title={showFavoritesOnly ? t.favoritesTitle[activeCategory] : t.categories[activeCategory]}
           count={clipboard.counts[activeCategory]}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -110,6 +123,7 @@ function App() {
         />
       )}
     </div>
+    </I18nContext.Provider>
   );
 }
 

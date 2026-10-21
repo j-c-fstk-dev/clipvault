@@ -279,6 +279,15 @@ pub fn get_capture_status(state: State<'_, AppState>) -> CaptureStatus {
     state.capture_status()
 }
 
+/// The desktop's language, used when Settings say "auto".
+#[tauri::command]
+pub fn system_language() -> &'static str {
+    match crate::i18n::Language::Auto.resolve() {
+        crate::i18n::Lang::En => "en",
+        crate::i18n::Lang::Pt => "pt",
+    }
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Settings {
     state.settings()

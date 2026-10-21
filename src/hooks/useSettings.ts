@@ -13,6 +13,7 @@ const defaultSettings: Settings = {
   minimizeToTray: true,
   hardwareAcceleration: true,
   openWith: {},
+  language: 'auto',
   shortcuts: {
     toggleApp: 'Ctrl+Shift+V',
     copySelected: 'Ctrl+C',

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AppWindow, X } from 'lucide-react';
 import { AppChoice } from '../types';
 import { IconButton, Overlay } from './ui';
+import { useI18n } from '../i18n';
 
 interface OpenWithDialogProps {
   /** File being opened. */
@@ -24,6 +25,7 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
   onOpen,
   onClose,
 }) => {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<string | null>(apps[0]?.id ?? null);
 
   useEffect(() => {
@@ -46,27 +48,27 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`Open ${name} with`}
+        aria-label={t.openWith.label(name)}
         onClick={e => e.stopPropagation()}
         className="sheet sheet-in w-full max-w-md rounded-2xl overflow-hidden"
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">
           <div className="min-w-0">
-            <h2 className="text-[17px] font-semibold">Open with</h2>
+            <h2 className="text-[17px] font-semibold">{t.openWith.title}</h2>
             <p className="text-small text-muted truncate" title={name}>
               {name}
               <span className="text-faint ml-2">{description}</span>
             </p>
           </div>
-          <IconButton label="Close" icon={X} onClick={onClose} />
+          <IconButton label={t.item.close} icon={X} onClick={onClose} />
         </div>
 
         {apps.length === 0 ? (
           <p className="px-5 pb-6 text-small text-muted">
-            No installed app opens this type of file. Install one, then try again.
+            {t.openWith.noApps}
           </p>
         ) : (
-          <ul className="max-h-80 overflow-auto px-3 pb-3 flex flex-col gap-0.5" role="listbox" aria-label="Apps">
+          <ul className="max-h-80 overflow-auto px-3 pb-3 flex flex-col gap-0.5" role="listbox" aria-label={t.openWith.apps}>
             {apps.map(app => {
               const isSelected = app.id === selected;
               return (
@@ -91,7 +93,7 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
                     <span className="flex-1 truncate text-body">{app.name}</span>
                     {app.isDefault && (
                       <span className="shrink-0 px-2 h-5 inline-flex items-center rounded-full text-[11px] font-medium bg-accent-faint text-accent">
-                        Default
+                        {t.openWith.default}
                       </span>
                     )}
                   </button>
@@ -108,7 +110,7 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
             onClick={() => selected && onOpen(selected, false)}
             className="pill h-8 px-4 rounded-lg text-small font-medium disabled:opacity-40"
           >
-            Just once
+            {t.openWith.justOnce}
           </button>
           <button
             type="button"
@@ -116,7 +118,7 @@ const OpenWithDialog: React.FC<OpenWithDialogProps> = ({
             onClick={() => selected && onOpen(selected, true)}
             className="lens h-8 px-4 rounded-lg text-small font-medium disabled:opacity-40"
           >
-            Always
+            {t.openWith.always}
           </button>
         </div>
       </div>

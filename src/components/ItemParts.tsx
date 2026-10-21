@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Copy, Maximize2, Plus, Star, Tag, Trash2, X } from 'lucide-react';
 import { ClipboardItem } from '../types';
 import { IconButton } from './ui';
+import { useI18n } from '../i18n';
 
 interface TagsProps {
   tags: string[];
@@ -17,6 +18,7 @@ interface TagsProps {
 
 /** An item's tags; each can be removed, and new ones typed in. */
 export const Tags: React.FC<TagsProps> = ({ tags, onAdd, onRemove, adding: controlled, onAddingChange }) => {
+  const { t } = useI18n();
   const [own, setOwn] = useState(false);
   const adding = controlled ?? own;
   const setAdding = (value: boolean) => (onAddingChange ? onAddingChange(value) : setOwn(value));
@@ -41,8 +43,8 @@ export const Tags: React.FC<TagsProps> = ({ tags, onAdd, onRemove, adding: contr
           <button
             type="button"
             onClick={() => onRemove(tag)}
-            aria-label={`Remove tag ${tag}`}
-            title="Remove tag"
+            aria-label={t.item.removeTagNamed(tag)}
+            title={t.item.removeTag}
             className="w-4 h-4 inline-flex items-center justify-center rounded-full opacity-60 hover:opacity-100"
           >
             <X className="w-3 h-3" />
@@ -63,8 +65,8 @@ export const Tags: React.FC<TagsProps> = ({ tags, onAdd, onRemove, adding: contr
             }
           }}
           onBlur={commit}
-          aria-label="New tag"
-          placeholder="Tag name"
+          aria-label={t.item.newTag}
+          placeholder={t.item.tagName}
           className="field h-[22px] w-28 px-2 rounded-full text-caption"
           autoFocus
         />
@@ -75,7 +77,9 @@ export const Tags: React.FC<TagsProps> = ({ tags, onAdd, onRemove, adding: contr
   );
 };
 
-const AddTag: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+const AddTag: React.FC<{ onClick: () => void }> = ({ onClick }) => {
+  const { t } = useI18n();
+  return (
   <button
     type="button"
     onClick={e => {
@@ -85,9 +89,10 @@ const AddTag: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     className="inline-flex items-center gap-1 h-[22px] px-2 rounded-full text-caption text-faint hover:text-ink hover-tint"
   >
     <Plus className="w-3 h-3" />
-    Add tag
+    {t.item.addTag}
   </button>
-);
+  );
+};
 
 interface ItemActionsProps {
   item: ClipboardItem;
@@ -111,24 +116,27 @@ export const ItemActions: React.FC<ItemActionsProps> = ({
   onTag,
   visible = false,
   className = '',
-}) => (
+}) => {
+  const { t } = useI18n();
+  return (
   <div
     onClick={e => e.stopPropagation()}
     className={`float-bar flex items-center p-0.5 rounded-[10px] transition-opacity ${
       visible ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
     } ${className}`}
   >
-    <IconButton size="sm" label="Copy" icon={Copy} onClick={onCopy} />
+    <IconButton size="sm" label={t.item.copy} icon={Copy} onClick={onCopy} />
     <IconButton
       size="sm"
-      label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      label={item.isFavorite ? t.item.removeFavorite : t.item.addFavorite}
       icon={Star}
       tone="star"
       onClick={onToggleFavorite}
       className={item.isFavorite ? '!text-star [&>svg]:fill-current' : ''}
     />
-    <IconButton size="sm" label="Add tag" icon={Tag} onClick={onTag} />
-    <IconButton size="sm" label="Open preview" icon={Maximize2} onClick={onView} />
-    <IconButton size="sm" label="Delete" icon={Trash2} tone="danger" onClick={onDelete} />
+    <IconButton size="sm" label={t.item.addTag} icon={Tag} onClick={onTag} />
+    <IconButton size="sm" label={t.item.openPreview} icon={Maximize2} onClick={onView} />
+    <IconButton size="sm" label={t.item.delete} icon={Trash2} tone="danger" onClick={onDelete} />
   </div>
-);
+  );
+};

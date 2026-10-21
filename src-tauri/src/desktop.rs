@@ -13,6 +13,7 @@ use tauri_plugin_notification::NotificationExt;
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
 
+use crate::i18n::{self, Lang};
 use crate::model::Item;
 
 const MAIN_WINDOW: &str = "main";
@@ -104,29 +105,39 @@ fn active_x11_window() -> Option<u32> {
     active.filter(|&id| id != x11rb::NONE)
 }
 
-/// The tray's "Pause capture" item, kept to mirror the setting.
+/// The tray's menu items, kept to mirror the settings.
 pub struct Tray {
+    show: MenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
+    quit: MenuItem<Wry>,
 }
 
 impl Tray {
     pub fn set_paused(&self, paused: bool) {
         let _ = self.pause.set_checked(paused);
     }
+
+    pub fn set_language(&self, lang: Lang) {
+        let texts = i18n::tray(lang);
+        let _ = self.show.set_text(texts.show);
+        let _ = self.pause.set_text(texts.pause);
+        let _ = self.quit.set_text(texts.quit);
+    }
 }
 
 /// Creates the tray icon. `on_toggle_pause` runs when the user clicks
-/// "Pause capture". Linux trays only deliver menu clicks, so the menu has
+/// "Pause recording". Linux trays only deliver menu clicks, so the menu has
 /// an explicit "Show" entry.
 pub fn build_tray(
     app: &AppHandle,
     paused: bool,
+    lang: Lang,
     on_toggle_pause: impl Fn(&AppHandle) + Send + Sync + 'static,
 ) -> tauri::Result<Tray> {
-    let show = MenuItem::with_id(app, MENU_SHOW, "Show ClipVault", true, None::<&str>)?;
-    let pause =
-        CheckMenuItem::with_id(app, MENU_PAUSE, "Pause capture", true, paused, None::<&str>)?;
-    let quit = MenuItem::with_id(app, MENU_QUIT, "Quit", true, None::<&str>)?;
+    let texts = i18n::tray(lang);
+    let show = MenuItem::with_id(app, MENU_SHOW, texts.show, true, None::<&str>)?;
+    let pause = CheckMenuItem::with_id(app, MENU_PAUSE, texts.pause, true, paused, None::<&str>)?;
+    let quit = MenuItem::with_id(app, MENU_QUIT, texts.quit, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[&show, &pause, &PredefinedMenuItem::separator(app)?, &quit],
@@ -155,7 +166,7 @@ pub fn build_tray(
         builder = builder.icon(icon.clone());
     }
     builder.build(app)?;
-    Ok(Tray { pause })
+    Ok(Tray { show, pause, quit })
 }
 
 /// Parses an accelerator such as `Ctrl+Shift+V`.
@@ -194,7 +205,7 @@ pub fn shortcut_plugin() -> tauri::plugin::TauriPlugin<Wry> {
 
 /// Shows a desktop notification for a new capture, unless the window is
 /// in front or one was shown moments ago.
-pub fn notify_capture(app: &AppHandle, item: &Item) {
+pub fn notify_capture(app: &AppHandle, item: &Item, lang: Lang) {
     static LAST: Mutex<Option<Instant>> = Mutex::new(None);
     if main_window_focused(app) {
         return;
@@ -209,7 +220,10 @@ pub fn notify_capture(app: &AppHandle, item: &Item) {
     let result = app
         .notification()
         .builder()
-        .title(format!("ClipVault · {}", item.category.label()))
+        .title(format!(
+            "ClipVault · {}",
+            i18n::category(item.category, lang)
+        ))
         .body(summary(&item.content, 120))
         .show();
     if let Err(err) = result {

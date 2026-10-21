@@ -7,6 +7,8 @@
 
   *A clipboard manager for Linux that remembers everything you copy — text, links, images, files and folders.*
 
+  **English** · [Português](README.pt-BR.md)
+
   [![CI](https://github.com/j-c-fstk-dev/clipvault/actions/workflows/ci.yml/badge.svg)](https://github.com/j-c-fstk-dev/clipvault/actions/workflows/ci.yml)
   [![Release](https://img.shields.io/github/v/release/j-c-fstk-dev/clipvault?include_prereleases)](https://github.com/j-c-fstk-dev/clipvault/releases)
   [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
@@ -65,6 +67,8 @@
   dark themes, 12 accent colors, Geist type. The glass is drawn without blur,
   so it stays sharp on older integrated graphics
 - **Preview** with metadata and quick actions: copy, favorite, tag, delete
+- **English and Portuguese** — follows your desktop's language, or pick one in
+  Settings (the tray menu and notifications follow too)
 - **Native and lightweight** — Rust backend with the system WebKitGTK, small `.deb`
 
 <p align="center">
@@ -167,6 +171,7 @@ clipvault/
 ├── src/                     # React + TypeScript UI
 │   ├── components/          # Sidebar, toolbar, cards, preview, settings, ui primitives
 │   ├── hooks/               # useClipboard, useSettings, useTheme
+│   ├── i18n/                # English and Portuguese texts
 │   ├── lib/                 # Backend calls, formatting, categories, colors
 │   ├── index.css            # Design tokens (light / dark) and glass styles
 │   └── types/               # Shared types
@@ -183,6 +188,7 @@ clipvault/
 │   │   ├── locate.rs        # Finds moved files by inode, name and size
 │   │   ├── model.rs         # Item types and parsing helpers
 │   │   ├── settings.rs      # settings.json
+│   │   ├── i18n.rs          # Tray and notification texts (en / pt)
 │   │   ├── commands.rs      # Commands called by the UI
 │   │   └── lib.rs           # App setup
 │   ├── tests/               # X11 capture / paste integration tests
@@ -209,6 +215,7 @@ clipvault/
 - [x] **Stage 6 — Releases:** tag → GitHub Release with `.deb` + `.AppImage`
 - [x] **0.1.1:** open with, follow moved files, background snapshots, image files as images
 - [x] **0.2.0:** macOS-inspired redesign
+- [x] **0.2.1:** smooth scrolling in dialogs, English and Portuguese
 - [ ] **Later:** `.rpm`, Flatpak, AUR, Wayland, auto-update, cloud sync (paid plans)
 
 ## 🤝 Contributing
